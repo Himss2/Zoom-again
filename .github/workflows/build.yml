@@ -1,4 +1,4 @@
-name: Build SmoothZoom
+name: Build ZoomRewrite
 
 on:
   push:
@@ -36,15 +36,15 @@ jobs:
         run: |
           mkdir -p package
           cp assets/manifest.json package/
-          cp build/libSmoothZoom.so package/
+          cp build/libZoomRewrite.so package/
           cd package
-          zip -r ../SmoothZoom.levipack .
+          zip -r ../ZoomRewrite.levipack .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SmoothZoom.levipack
-          path: SmoothZoom.levipack
+          name: ZoomRewrite.levipack
+          path: ZoomRewrite.levipack
 
       - name: Update "latest" release
         uses: softprops/action-gh-release@v2
@@ -53,4 +53,4 @@ jobs:
           name: Latest build
           body: Automatically built from commit ${{ github.sha }}.
           prerelease: true
-          files: SmoothZoom.levipack
+          files: ZoomRewrite.levipack
