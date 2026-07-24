@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.22)
-project(SmoothZoom CXX)
+project(ZoomRewrite CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(NOT ANDROID_ABI STREQUAL "arm64-v8a")
-    message(FATAL_ERROR "SmoothZoom must be built for arm64-v8a (got: ${ANDROID_ABI})")
+    message(FATAL_ERROR "ZoomRewrite must be built for arm64-v8a (got: ${ANDROID_ABI})")
 endif()
 
 include(FetchContent)
@@ -45,22 +45,20 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(preloader_android)
 
-add_library(SmoothZoom SHARED
+add_library(ZoomRewrite SHARED
     src/Core/ModContext.cpp
     src/Core/ModEntry.cpp
-    src/Camera/FovOverride.cpp
-    src/Input/TouchTracker.cpp
-    src/UI/ZoomZone.cpp
-    src/Zoom/ZoomState.cpp
+    src/CameraHook/CameraHook.cpp
+    src/ZoomController/ZoomController.cpp
 )
 
-target_include_directories(SmoothZoom PRIVATE
+target_include_directories(ZoomRewrite PRIVATE
     include
     ${boost_pfr_SOURCE_DIR}/include
     ${magic_enum_SOURCE_DIR}/include
 )
-target_link_libraries(SmoothZoom PRIVATE preloader nlohmann_json::nlohmann_json fmt::fmt log)
+target_link_libraries(ZoomRewrite PRIVATE preloader nlohmann_json::nlohmann_json fmt::fmt log)
 
-set_target_properties(SmoothZoom PROPERTIES
-    OUTPUT_NAME "SmoothZoom"
+set_target_properties(ZoomRewrite PROPERTIES
+    OUTPUT_NAME "ZoomRewrite"
 )
