@@ -23,10 +23,6 @@ float Clamp(float value) {
 
 } // namespace
 
-void Install() {
-    camera_hook::SetFrameTickCallback(Tick);
-}
-
 void BeginZoom() {
     g_factor.store(kNeutralFactor, std::memory_order_relaxed);
     g_releasing.store(false, std::memory_order_relaxed);
