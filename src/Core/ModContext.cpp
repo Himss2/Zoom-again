@@ -4,13 +4,22 @@
 #include <string>
 
 namespace core {
+namespace {
+
+pl::mod::NativeMod* g_mod = nullptr;
+
+} // namespace
+
+void Init() {
+    g_mod = pl::mod::NativeMod::current();
+}
 
 pl::log::Logger& Log() {
-    return pl::mod::NativeMod::current()->getLogger();
+    return g_mod->getLogger();
 }
 
 const char* ModId() {
-    static const std::string id = pl::mod::NativeMod::current()->getId();
+    static const std::string id = g_mod->getId();
     return id.c_str();
 }
 
