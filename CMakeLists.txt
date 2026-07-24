@@ -51,8 +51,8 @@ add_library(ZoomRewrite SHARED
     src/CameraHook/CameraHook.cpp
     src/ZoomController/ZoomController.cpp
     src/TouchController/TouchController.cpp
+    src/ZoomButton/ZoomButton.cpp
 )
-
 target_include_directories(ZoomRewrite PRIVATE
     include
     ${boost_pfr_SOURCE_DIR}/include
@@ -64,11 +64,4 @@ set_target_properties(ZoomRewrite PROPERTIES
     OUTPUT_NAME "ZoomRewrite"
 )
 
-add_library(ZoomRewrite SHARED
-    src/Core/ModContext.cpp
-    src/Core/ModEntry.cpp
-    src/CameraHook/CameraHook.cpp
-    src/ZoomController/ZoomController.cpp
-    src/TouchController/TouchController.cpp
-    src/ZoomButton/ZoomButton.cpp
-)
+
