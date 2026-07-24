@@ -1,10 +1,10 @@
 {
   "type": "preload-native",
-  "name": "SmoothZoom",
-  "description": "Flarial-style hold-and-drag zoom (drag up = zoom in, drag down = zoom out) with smooth release animation.",
+  "name": "ZoomRewrite",
+  "description": "Flarial-style hold-and-drag zoom, rebuilt with a modular architecture (CameraHook / ZoomController / TouchController / ZoomButton).",
   "author": "Himss",
   "version": "0.1.0",
-  "entry": "libSmoothZoom.so",
+  "entry": "libZoomRewrite.so",
   "minecraft_versions": ["1.26.3*"],
   "overwrite_files": [],
   "overwrite_folders": []
