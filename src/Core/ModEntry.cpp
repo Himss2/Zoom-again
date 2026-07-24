@@ -3,13 +3,12 @@
 // STEP 2 of the build order in docs/architecture.md: CameraHook +
 // ZoomController + TouchController. Still no ZoomButton and no
 // pl::modmenu::registerModule call (Blocker #1 remains unresolved -
-// see docs/architecture.md) - purely testing that touch-driven drag
-// correctly drives the zoom, via logcat and visual confirmation, with
-// zero UI drawn yet.
+// see docs/architecture.md).
 //
-// Step 1's fixed-value test block (BeginZoom() + a hardcoded
-// UpdateDrag()) has been removed now that TouchController exists to
-// drive it for real.
+// core::Init() MUST be the very first call in load() - see
+// Core/ModContext.hpp for why (pl::mod::NativeMod::current() crashes
+// if called later from an async callback like TouchController's touch
+// handler; Init() caches it once while it's still valid).
 
 #include "Core/ModContext.hpp"
 #include "CameraHook/CameraHook.hpp"
@@ -26,6 +25,8 @@ public:
     }
 
     bool load() {
+        core::Init(); // MUST be first - see Core/ModContext.hpp
+
         auto& log = core::Log();
         log.info("Core: load() start (Step 2: + TouchController)");
 
