@@ -50,6 +50,7 @@ add_library(ZoomRewrite SHARED
     src/Core/ModEntry.cpp
     src/CameraHook/CameraHook.cpp
     src/ZoomController/ZoomController.cpp
+    src/TouchController/TouchController.cpp
 )
 
 target_include_directories(ZoomRewrite PRIVATE
