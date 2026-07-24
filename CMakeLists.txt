@@ -63,3 +63,12 @@ target_link_libraries(ZoomRewrite PRIVATE preloader nlohmann_json::nlohmann_json
 set_target_properties(ZoomRewrite PROPERTIES
     OUTPUT_NAME "ZoomRewrite"
 )
+
+add_library(ZoomRewrite SHARED
+    src/Core/ModContext.cpp
+    src/Core/ModEntry.cpp
+    src/CameraHook/CameraHook.cpp
+    src/ZoomController/ZoomController.cpp
+    src/TouchController/TouchController.cpp
+    src/ZoomButton/ZoomButton.cpp
+)
