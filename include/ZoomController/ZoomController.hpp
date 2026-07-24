@@ -12,8 +12,6 @@ constexpr float kNeutralFactor = 1.0f;
 constexpr float kMinFactor     = 0.10f;
 constexpr float kMaxFactor     = 4.00f;
 
-// Call once, from mod load(), before Begin/Update/EndZoom are used.
-void Install();
 
 // Starts a hold: resets to neutral and begins overriding FOV.
 void BeginZoom();
