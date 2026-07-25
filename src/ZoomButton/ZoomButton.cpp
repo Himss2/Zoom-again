@@ -8,7 +8,7 @@
 namespace zoom_button {
 namespace {
 
-constexpr const char* kModuleId = "zoomrewrite.module";
+constexpr const char* kModuleId = "zrtest_20260725_fresh_id_v1";
 
 // Screen-space rectangle for the hand-drawn zone. Adjust to taste -
 // not adjustable via the launcher's HUD editor since it's not a real
@@ -50,7 +50,7 @@ void Install() {
     // theory and we'll fold a real button/interaction into ZoomButton
     // properly. If it still crashes, this is ruled out too.
     pl::modmenu::ButtonInfo diagButton{};
-    diagButton.buttonId = "zoomrewrite.diag_button";
+    diagButton.buttonId = "zrtest_20260725_diag_v1";
     diagButton.moduleId = kModuleId;
     diagButton.displayName = "Diagnostic";
     diagButton.modId = core::ModId();
@@ -62,7 +62,7 @@ void Install() {
 }
 
 void Uninstall() {
-    pl::modmenu::unregisterButton("zoomrewrite.diag_button");
+    pl::modmenu::unregisterButton("zrtest_20260725_diag_v1");
     pl::modmenu::unregisterModule(kModuleId);
 }
 
