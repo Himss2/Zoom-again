@@ -55,7 +55,7 @@ void Install() {
     diagButton.displayName = "Diagnostic";
     diagButton.modId = core::ModId();
     diagButton.label = "D";
-    diagButton.defaultVisible = false; // don't actually show it
+    diagButton.defaultVisible = true; // CHANGED from false - testing visibility theory
     pl::modmenu::registerButton(diagButton);
     log.info("ZoomButton: diagnostic registerButton returned OK");
     // --- end diagnostic ---
