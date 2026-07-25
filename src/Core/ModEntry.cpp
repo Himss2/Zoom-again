@@ -34,14 +34,26 @@ public:
         auto& log = core::Log();
         log.info("Core: load() start (Step 3: + ZoomButton, Blocker #1 test)");
 
+        zoom_button::Install(); // <-- the Blocker #1 call, now FIRST (see comment below)
+
+        // ORDER CHANGED: previously CameraHook::Install() (which
+        // installs a native pl::memory::hook) ran BEFORE this. Every
+        // crash so far happened with that order. OffhandFix, which
+        // never crashes, always calls registerModule as the very FIRST
+        // SDK call in load() - no hook installed beforehand. Testing
+        // whether installing a hook before registerModule is what
+        // actually causes the crash.
         if (!camera_hook::Install()) {
             log.error("Core: CameraHook::Install() failed, aborting load()");
             return false;
         }
 
-        zoom_button::Install(); // <-- the Blocker #1 call
         touch_controller::Install();
 
+        // Combined per-frame tick: advances the release animation and
+        // redraws the zone. Core is the composition root wiring these
+        // two together - neither ZoomController nor ZoomButton knows
+        // about the other.
         camera_hook::SetFrameTickCallback([]() {
             zoom_controller::Tick();
             zoom_button::Draw(zoom_controller::IsActive());
