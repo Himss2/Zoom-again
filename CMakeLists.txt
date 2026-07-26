@@ -52,13 +52,15 @@ add_library(ZoomRewrite SHARED
     src/ZoomController/ZoomController.cpp
     src/TouchController/TouchController.cpp
     src/ZoomButton/ZoomButton.cpp
+    src/ZoomOverlay/ZoomOverlay.cpp
 )
+
 target_include_directories(ZoomRewrite PRIVATE
     include
     ${boost_pfr_SOURCE_DIR}/include
     ${magic_enum_SOURCE_DIR}/include
 )
-target_link_libraries(ZoomRewrite PRIVATE preloader nlohmann_json::nlohmann_json fmt::fmt log)
+target_link_libraries(ZoomRewrite PRIVATE preloader nlohmann_json::nlohmann_json fmt::fmt log dl EGL GLESv3)
 
 set_target_properties(ZoomRewrite PROPERTIES
     OUTPUT_NAME "ZoomRewrite"
