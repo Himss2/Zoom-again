@@ -2,67 +2,60 @@
 
 #include "Core/ModContext.hpp"
 
+#include <pl/Config.hpp>
 #include <pl/ModMenu.hpp>
 #include <array>
+#include <optional>
 
 namespace zoom_button {
 namespace {
 
-constexpr const char* kModuleId = "zrtest_20260725_fresh_id_v1";
+constexpr const char* kModuleId = "zoomrewrite.hud";
 
-// Screen-space rectangle for the hand-drawn zone. Adjust to taste -
-// not adjustable via the launcher's HUD editor since it's not a real
-// ButtonInfo widget.
 constexpr float kZoneX = 60.0f;
 constexpr float kZoneY = 120.0f;
 constexpr float kZoneW = 150.0f;
 constexpr float kZoneH = 90.0f;
 
-constexpr uint32_t kColorIdle   = 0x88666666u; // ARGB, semi-transparent grey
-constexpr uint32_t kColorActive = 0x8800AA00u; // ARGB, semi-transparent green
+constexpr uint32_t kColorIdle   = 0x88666666u;
+constexpr uint32_t kColorActive = 0x8800AA00u;
 constexpr uint32_t kColorText   = 0xFFFFFFFFu;
+
+struct ZoomButtonConfig {
+    int version = 1;
+    bool showOverlay = true;
+};
+
+std::optional<pl::config::ConfigFile<ZoomButtonConfig>> g_config;
 
 } // namespace
 
-void Install() {
+bool Install() {
     auto& log = core::Log();
 
-    pl::modmenu::ModuleInfo module{};
-    module.moduleId = kModuleId;
-    module.displayName = "Zoom Rewrite";
-    module.description = "Hold + drag (same finger) to zoom, Flarial-style.";
-    module.modId = core::ModId();
-    module.defaultEnabled = true;
+    g_config.emplace();
+    if (!g_config->load()) {
+        log.error("ZoomButton: config load failed");
+        return false;
+    }
+    log.info("ZoomButton: config loaded (showOverlay={})", g_config->value().showOverlay);
 
-    log.info("ZoomButton: about to registerModule moduleId='{}' displayName='{}' modId='{}'",
-             module.moduleId, module.displayName, module.modId);
+    bool ok = pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
+        .modId(core::ModId())
+        .description("Hold + drag (same finger) to zoom, Flarial-style.")
+        .defaultEnabled(g_config->value().showOverlay)
+        .registerModule();
 
-    pl::modmenu::registerModule(module);
+    if (!ok) {
+        log.error("ZoomButton: ModuleBuilder::registerModule() returned false");
+        return false;
+    }
 
-    log.info("ZoomButton: registerModule returned OK");
-
-    // --- DIAGNOSTIC ONLY: testing whether registerModule needs a
-    // button registered immediately after it to avoid crashing.
-    // OffhandFix (which has never crashed) always calls registerButton
-    // right after registerModule in the same function; every crashing
-    // test so far (including this project's) called registerModule
-    // alone. If this dummy button avoids the crash, that confirms the
-    // theory and we'll fold a real button/interaction into ZoomButton
-    // properly. If it still crashes, this is ruled out too.
-    pl::modmenu::ButtonInfo diagButton{};
-    diagButton.buttonId = "zrtest_20260725_diag_v1";
-    diagButton.moduleId = kModuleId;
-    diagButton.displayName = "Diagnostic";
-    diagButton.modId = core::ModId();
-    diagButton.label = "D";
-    diagButton.defaultVisible = true; // CHANGED from false - testing visibility theory
-    pl::modmenu::registerButton(diagButton);
-    log.info("ZoomButton: diagnostic registerButton returned OK");
-    // --- end diagnostic ---
+    log.info("ZoomButton: registerModule (via ModuleBuilder) returned OK");
+    return true;
 }
 
 void Uninstall() {
-    pl::modmenu::unregisterButton("zrtest_20260725_diag_v1");
     pl::modmenu::unregisterModule(kModuleId);
 }
 
