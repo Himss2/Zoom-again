@@ -2,7 +2,7 @@
 
 #include "Core/ModContext.hpp"
 #include "ZoomController/ZoomController.hpp"
-#include "ZoomOverlay/ZoomOverlay.hpp"
+#include "ZoomButton/ZoomButton.hpp"
 
 #include <pl/Input.hpp>
 
@@ -23,7 +23,7 @@ float g_lastY = 0.0f;
 bool OnTouch(const pl::input::TouchEvent& ev) {
     switch (ev.action) {
         case kActionDown:
-            if (g_trackedPointerId == -1 && zoom_overlay::Contains(ev.x, ev.y)) {
+            if (g_trackedPointerId == -1 && zoom_button::Contains(ev.x, ev.y)) {
                 g_trackedPointerId = ev.pointerId;
                 g_lastY = ev.y;
                 zoom_controller::BeginZoom();
@@ -61,7 +61,7 @@ bool OnTouch(const pl::input::TouchEvent& ev) {
 
 void Install() {
     pl::input::registerTouchCallback(OnTouch);
-    core::Log().info("TouchController: installed (ZoomOverlay-gated)");
+    core::Log().info("TouchController: installed (Step 3 - gated behind ZoomButton::Contains)");
 }
 
 } // namespace touch_controller
