@@ -16,20 +16,22 @@ struct ZoomButtonConfig {
     bool showOverlay = true;
     float x = 60.0f;
     float y = 120.0f;
-    float scale = 1.0f; // Default scale (100%)
+    float scale = 1.0f;
 };
 
 namespace {
 
 constexpr const char* kModuleId = "zoomrewrite.hud";
 
-// Ukuran dasar tombol sebelum di-scale
-constexpr float kBaseW = 150.0f;
-constexpr float kBaseH = 90.0f;
+// Ukuran dasar tombol
+constexpr float kBaseW = 100.0f;
+constexpr float kBaseH = 100.0f; // Dibuat agak membulat/presisi persegi seperti tombol pedang/crosshair
 
-constexpr uint32_t kColorIdle   = 0x88666666u;
-constexpr uint32_t kColorActive = 0x8800AA00u;
-constexpr uint32_t kColorText   = 0xFFFFFFFFu;
+// WARNA GAYA MINECRAFT HUD (Hex ARGB)
+constexpr uint32_t kColorBgIdle     = 0x44000000u; // Hitam Transparan (Mirip Tombol MC)
+constexpr uint32_t kColorBgActive   = 0x77008800u; // Hijau Transparan saat ditekan
+constexpr uint32_t kColorBorder     = 0x55FFFFFFu; // Garis pinggir putih halus
+constexpr uint32_t kColorText       = 0xEEFFFFFFu; // Teks Putih Terang
 
 std::optional<pl::config::ConfigFile<ZoomButtonConfig>> g_config;
 
@@ -43,18 +45,15 @@ bool Install() {
         log.error("ZoomButton: config load failed");
         return false;
     }
-    log.info("ZoomButton: config loaded (x={}, y={}, scale={})", 
-              g_config->value().x, g_config->value().y, g_config->value().scale);
 
     std::string modIdStr = core::ModId();
     if (modIdStr.empty()) {
         modIdStr = "zoom_rewrite";
     }
 
-    // ModuleBuilder standar tanpa addSlider yang error
     bool ok = pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
         .modId(modIdStr)
-        .description("Hold + drag (same finger) to zoom, Flarial-style.")
+        .description("Hold + drag to zoom in game.")
         .defaultEnabled(g_config->value().showOverlay)
         .registerModule();
 
@@ -63,7 +62,7 @@ bool Install() {
         return false;
     }
 
-    log.info("ZoomButton: registerModule (via ModuleBuilder) returned OK");
+    log.info("ZoomButton: registered module successfully");
     return true;
 }
 
@@ -99,21 +98,32 @@ void Draw(bool isActive) {
     float w = kBaseW * s;
     float h = kBaseH * s;
 
-    std::array<pl::modmenu::DrawCommand, 2> commands{};
+    // Menyiapkan 3 elemen gambar: Background, Border, dan Teks
+    std::array<pl::modmenu::DrawCommand, 3> commands{};
 
+    // 1. Background Kotak Utama (Transparan)
     commands[0].type = pl::modmenu::DrawCommandType::RectFilled;
     commands[0].x = x;
     commands[0].y = y;
     commands[0].w = w;
     commands[0].h = h;
-    commands[0].color = isActive ? kColorActive : kColorIdle;
+    commands[0].color = isActive ? kColorBgActive : kColorBgIdle;
 
-    commands[1].type = pl::modmenu::DrawCommandType::Text;
-    commands[1].x = x + w * 0.5f;
-    commands[1].y = y + h * 0.5f;
-    commands[1].text = "ZM";
-    commands[1].color = kColorText;
-    commands[1].size = 24.0f * s;
+    // 2. Garis Pinggir / Border
+    commands[1].type = pl::modmenu::DrawCommandType::Rect;
+    commands[1].x = x;
+    commands[1].y = y;
+    commands[1].w = w;
+    commands[1].h = h;
+    commands[1].color = kColorBorder;
+
+    // 3. Teks "ZM" di Tengah
+    commands[2].type = pl::modmenu::DrawCommandType::Text;
+    commands[2].x = x + w * 0.5f;
+    commands[2].y = y + h * 0.5f;
+    commands[2].text = "ZM";
+    commands[2].color = kColorText;
+    commands[2].size = 20.0f * s;
 
     pl::modmenu::submitDrawCommands(kModuleId, commands);
 }
