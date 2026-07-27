@@ -5,7 +5,6 @@
 #include "ZoomButton/ZoomButton.hpp"
 
 #include <pl/Input.hpp>
-#include <pl/ModMenu.hpp>
 
 namespace touch_controller {
 namespace {
@@ -22,11 +21,6 @@ int g_trackedPointerId = -1;
 float g_lastY = 0.0f;
 
 bool OnTouch(const pl::input::TouchEvent& ev) {
-    // BLOKIR INPUT ZOOM JIKA MOD MENU SEDANG DIBUKA
-    if (pl::modmenu::isOpen()) {
-        return false;
-    }
-
     switch (ev.action) {
         case kActionDown:
             if (g_trackedPointerId == -1 && zoom_button::Contains(ev.x, ev.y)) {
