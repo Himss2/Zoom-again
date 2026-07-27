@@ -14,7 +14,8 @@ constexpr int kActionUp     = 1;
 constexpr int kActionMove   = 2;
 constexpr int kActionCancel = 3;
 
-constexpr float kDragSensitivity = 0.01f;
+// Sensitivitas Disesuaikan agar gerakan drag lebih halus & presisi
+constexpr float kDragSensitivity = 0.005f;
 constexpr float kDragSign = -1.0f;
 
 int g_trackedPointerId = -1;
