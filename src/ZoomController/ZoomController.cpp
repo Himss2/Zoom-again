@@ -5,6 +5,11 @@
 #include <atomic>
 #include <cmath>
 
+// Forward declaration API Levi UI Position Editor
+namespace pl::modmenu {
+    extern bool isPositionEditorOpen();
+}
+
 namespace zoom_controller {
 namespace {
 
@@ -28,6 +33,13 @@ float Clamp(float value) {
 } // namespace
 
 void BeginZoom() {
+    // -------------------------------------------------------------------------
+    // SAFETY GUARD: Jika UI Editor terbuka, cegah Zoom untuk dimulai.
+    // -------------------------------------------------------------------------
+    if (pl::modmenu::isPositionEditorOpen()) {
+        return;
+    }
+
     g_factor.store(kNeutralFactor, std::memory_order_relaxed);
     g_releasing.store(false, std::memory_order_relaxed);
     g_active.store(true, std::memory_order_relaxed);
@@ -38,6 +50,13 @@ void UpdateDrag(float delta) {
     if (!g_active.load(std::memory_order_relaxed)) {
         return;
     }
+
+    // Jika UI Editor tiba-tiba terbuka di tengah jalan, langsung hentikan zoom
+    if (pl::modmenu::isPositionEditorOpen()) {
+        EndZoom();
+        return;
+    }
+
     float f = Clamp(g_factor.load(std::memory_order_relaxed) + delta);
     g_factor.store(f, std::memory_order_relaxed);
     camera_hook::SetOverride(f);
@@ -48,6 +67,17 @@ void EndZoom() {
 }
 
 void Tick() {
+    // Jika UI Editor sedang terbuka, matikan zoom aktif dan bersihkan camera override
+    if (pl::modmenu::isPositionEditorOpen()) {
+        if (g_active.load(std::memory_order_relaxed)) {
+            g_active.store(false, std::memory_order_relaxed);
+            g_releasing.store(false, std::memory_order_relaxed);
+            g_factor.store(kNeutralFactor, std::memory_order_relaxed);
+            camera_hook::ClearOverride();
+        }
+        return;
+    }
+
     if (!g_active.load(std::memory_order_relaxed)) {
         return;
     }
