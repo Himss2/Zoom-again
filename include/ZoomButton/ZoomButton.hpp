@@ -13,11 +13,6 @@
 // attempt used), loads a pl::config::ConfigFile first per the
 // checklist ("Load config before registering runtime UI"), and is
 // called from enable() rather than load() - see Core/ModEntry.cpp.
-//
-// THIS IS WHERE BLOCKER #1 LIVES (see docs/architecture.md): every
-// previous call to registerModule() crashed deterministically
-// (SIGSEGV, fault addr 0x10). This revision tests whether matching the
-// official pattern exactly avoids it.
 
 namespace zoom_button {
 
@@ -35,5 +30,12 @@ void Draw(bool isActive);
 // True if the given screen-space point falls inside the zone - used by
 // TouchController to decide whether an ACTION_DOWN starts a hold.
 bool Contains(float x, float y);
+
+// --- HELPER UNTUK POSITION & SCALE DINAMIS ---
+float GetX();
+float GetY();
+float GetScale();
+void SetPosition(float x, float y);
+void SetScale(float scale);
 
 } // namespace zoom_button
