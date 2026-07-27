@@ -2,23 +2,25 @@
 
 #include "Core/ModContext.hpp"
 
+#include <pl/Config.hpp>
 #include <pl/ModMenu.hpp>
 #include <array>
-
-// NOTE: pl::config::ConfigFile<T> usage was tried here (per the
-// official checklist: "Load config before registering runtime UI")
-// but pl::Config.hpp's boost::pfr-based reflection failed to compile
-// against this project's boost_pfr 2.2.0 + NDK r27c combination - a
-// template instantiation error inside boost/pfr/detail itself, the
-// first time ANY module in this whole debugging history actually
-// instantiated ConfigFile<SomeStruct> (earlier projects fetched
-// boost_pfr only because pl/Config.hpp includes it unconditionally,
-// but never triggered this specific code path). Dropped for now to
-// isolate whether ModuleBuilder + enable()-timing alone (the other two
-// factors) already avoid the Blocker #1 crash; config integration to
-// be revisited separately if so.
+#include <optional>
 
 namespace zoom_button {
+
+// NOT in an anonymous namespace: boost::pfr's field-name extraction
+// (used internally by pl::config::ConfigFile<T>) requires T to have
+// EXTERNAL linkage - a type declared inside an anonymous namespace has
+// internal linkage and fails to compile against boost::pfr's
+// fake_object/do_not_use_PFR_with_local_types mechanism (that was the
+// actual cause of the earlier boost/pfr/detail compile error, not a
+// version incompatibility as first suspected).
+struct ZoomButtonConfig {
+    int version = 1;
+    bool showOverlay = true;
+};
+
 namespace {
 
 constexpr const char* kModuleId = "zoomrewrite.hud";
@@ -32,15 +34,24 @@ constexpr uint32_t kColorIdle   = 0x88666666u;
 constexpr uint32_t kColorActive = 0x8800AA00u;
 constexpr uint32_t kColorText   = 0xFFFFFFFFu;
 
+std::optional<pl::config::ConfigFile<ZoomButtonConfig>> g_config;
+
 } // namespace
 
 bool Install() {
     auto& log = core::Log();
 
+    g_config.emplace();
+    if (!g_config->load()) {
+        log.error("ZoomButton: config load failed");
+        return false;
+    }
+    log.info("ZoomButton: config loaded (showOverlay={})", g_config->value().showOverlay);
+
     bool ok = pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
         .modId(core::ModId())
         .description("Hold + drag (same finger) to zoom, Flarial-style.")
-        .defaultEnabled(true)
+        .defaultEnabled(g_config->value().showOverlay)
         .registerModule();
 
     if (!ok) {
