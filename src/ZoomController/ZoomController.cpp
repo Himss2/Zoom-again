@@ -9,9 +9,9 @@ namespace zoom_controller {
 namespace {
 
 // =============================================================================
-// OPTIMIZED ANIMATION SETTINGS
+// OPTIMIZED ANIMATION SETTINGS (ZOOM.CPP STYLE)
 // =============================================================================
-constexpr float kZoomLerpSpeed     = 0.25f; // Naikkan sedikit agar terasa lebih cepat & responsif (snappy)
+constexpr float kZoomLerpSpeed     = 0.22f; 
 constexpr float kSnapEps           = 0.0005f;
 
 constexpr float kInitialZoomFactor = 0.35f; 
@@ -54,6 +54,7 @@ void EndZoom() {
 }
 
 void Tick() {
+    // Trik dari zoom.cpp: Jika tidak aktif, langsung RETURN! 0% Overhead CPU
     if (!g_active.load(std::memory_order_relaxed)) {
         return;
     }
@@ -61,22 +62,17 @@ void Tick() {
     float target = g_targetFactor.load(std::memory_order_relaxed);
     float diff = target - g_currentFactor;
 
-    // OPTIMASI: Jika selisih target dan posisi saat ini sudah sangat kecil (diam), 
-    // langsung kunci nilainya agar tidak membebankan kalkulasi CPU terus menerus.
-    if (std::fabs(diff) < kSnapEps && !g_releasing.load(std::memory_order_relaxed)) {
-        g_currentFactor = target;
-        camera_hook::SetOverride(g_currentFactor);
-        return;
-    }
-
-    // Smooth Lerp Update
+    // Transisi Interpolasi Mulus
     g_currentFactor += diff * kZoomLerpSpeed;
 
+    // Jika animasi selesai dan kembali ke FOV Normal (1.0f)
     if (g_releasing.load(std::memory_order_relaxed)) {
         if (std::fabs(g_currentFactor - kNeutralFactor) < kSnapEps) {
             g_currentFactor = kNeutralFactor;
             g_active.store(false, std::memory_order_relaxed);
             g_releasing.store(false, std::memory_order_relaxed);
+            
+            // Bersihkan override kamera agar Minecraft berjalan 100% Native
             camera_hook::ClearOverride();
             return;
         }
