@@ -9,11 +9,6 @@
 #include <string>
 #include <algorithm>
 
-// Forward declaration API Levi UI Position Editor
-namespace pl::modmenu {
-    extern bool isPositionEditorOpen();
-}
-
 namespace zoom_button {
 
 struct ZoomButtonConfig {
@@ -37,6 +32,7 @@ constexpr uint32_t kColorActive = 0x8800AA00u;
 constexpr uint32_t kColorText   = 0xFFFFFFFFu;
 
 std::optional<pl::config::ConfigFile<ZoomButtonConfig>> g_config;
+bool g_isEditModeActive = false; // State internal untuk UI editor
 
 } // namespace
 
@@ -89,7 +85,7 @@ void SetPosition(float x, float y) {
 
 void SetScale(float scale) {
     if (g_config) {
-        g_config->value().scale = std::clamp(scale, 0.5f, 3.0f); // Batas scale 50% - 300%
+        g_config->value().scale = std::clamp(scale, 0.5f, 3.0f);
         g_config->save();
     }
 }
@@ -123,15 +119,7 @@ void Draw(bool isActive) {
 }
 
 bool Contains(float px, float py) {
-    // -------------------------------------------------------------------------
-    // FIX EDIT MODE: Jika UI Editor aktif, paksa return false!
-    // Supaya TouchController menganggap tombol TIDAK DITEKAN, sehingga zoom
-    // tidak terpicu dan gesture drag diserahkan penuh ke Levi Position Editor.
-    // -------------------------------------------------------------------------
-    if (pl::modmenu::isPositionEditorOpen()) {
-        return false;
-    }
-
+    if (g_isEditModeActive) return false;
     if (!g_config) return false;
 
     float x = g_config->value().x;
