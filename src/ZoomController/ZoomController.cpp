@@ -11,13 +11,17 @@ namespace {
 constexpr float kReleaseLerpSpeed = 0.15f;
 constexpr float kReleaseSnapEps   = 0.01f;
 
+// --- PENYESUAIAN BATAS ZOOM ---
+constexpr float kMinZoomLimit = 0.015f; // Zoom IN super dekat (~66x zoom, jauh melampaui Spyglass)
+constexpr float kMaxZoomLimit = 1.0f;   // Zoom OUT maksimal di FOV Normal (1.0f), DIJAMIN layar tidak terbalik!
+
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_releasing{false};
 std::atomic<float> g_factor{kNeutralFactor};
 
 float Clamp(float value) {
-    if (value < kMinFactor) return kMinFactor;
-    if (value > kMaxFactor) return kMaxFactor;
+    if (value < kMinZoomLimit) return kMinZoomLimit;
+    if (value > kMaxZoomLimit) return kMaxZoomLimit;
     return value;
 }
 
