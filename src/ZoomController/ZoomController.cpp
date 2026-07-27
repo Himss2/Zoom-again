@@ -9,13 +9,12 @@ namespace zoom_controller {
 namespace {
 
 // =============================================================================
-// ANIMATION SETTINGS
+// OPTIMIZED ANIMATION SETTINGS
 // =============================================================================
-constexpr float kZoomLerpSpeed     = 0.18f; // Kecepatan transisi animasi
+constexpr float kZoomLerpSpeed     = 0.25f; // Naikkan sedikit agar terasa lebih cepat & responsif (snappy)
 constexpr float kSnapEps           = 0.0005f;
 
-// Note: kNeutralFactor (1.0f) sudah terdefinisi dari ZoomController.hpp
-constexpr float kInitialZoomFactor = 0.35f; // FOV Awal saat tombol BARU DITEKAN (Smooth Animation)
+constexpr float kInitialZoomFactor = 0.35f; 
 constexpr float kMinZoomLimit      = 0.0001f; 
 constexpr float kMaxZoomLimit      = 1.0f;   
 
@@ -34,8 +33,6 @@ float Clamp(float value) {
 } // namespace
 
 void BeginZoom() {
-    // Saat ditekan, target langsung diset ke kInitialZoomFactor.
-    // g_currentFactor (1.0f) akan otomatis ter-animasi mulus menuju target di Tick()
     g_targetFactor.store(kInitialZoomFactor, std::memory_order_relaxed);
     g_releasing.store(false, std::memory_order_relaxed);
     g_active.store(true, std::memory_order_relaxed);
@@ -52,7 +49,6 @@ void UpdateDrag(float delta) {
 }
 
 void EndZoom() {
-    // Saat dilepas, kembalikan target ke kNeutralFactor (1.0f)
     g_targetFactor.store(kNeutralFactor, std::memory_order_relaxed);
     g_releasing.store(true, std::memory_order_relaxed);
 }
@@ -63,11 +59,18 @@ void Tick() {
     }
 
     float target = g_targetFactor.load(std::memory_order_relaxed);
+    float diff = target - g_currentFactor;
 
-    // -------------------------------------------------------------------------
-    // SMOOTH LERP INTERPOLATION
-    // -------------------------------------------------------------------------
-    g_currentFactor += (target - g_currentFactor) * kZoomLerpSpeed;
+    // OPTIMASI: Jika selisih target dan posisi saat ini sudah sangat kecil (diam), 
+    // langsung kunci nilainya agar tidak membebankan kalkulasi CPU terus menerus.
+    if (std::fabs(diff) < kSnapEps && !g_releasing.load(std::memory_order_relaxed)) {
+        g_currentFactor = target;
+        camera_hook::SetOverride(g_currentFactor);
+        return;
+    }
+
+    // Smooth Lerp Update
+    g_currentFactor += diff * kZoomLerpSpeed;
 
     if (g_releasing.load(std::memory_order_relaxed)) {
         if (std::fabs(g_currentFactor - kNeutralFactor) < kSnapEps) {
