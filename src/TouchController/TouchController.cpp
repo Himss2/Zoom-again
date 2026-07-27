@@ -18,13 +18,11 @@ constexpr int kActionCancel = 3;
 constexpr float kDragSensitivity = 0.005f;
 constexpr float kDragSign = -1.0f;
 
-// --- TIMER LONG PRESS UNTUK REPOSITION MODE ---
-// Tentukan berapa detik tombol harus ditahan sebelum bisa dipindahkan.
-// Ubah angka ini (misal 3.0f atau 5.0f detik) sesuai kenyamanan kamu.
-constexpr float kLongPressDurationSec = 3.0f; 
+// --- DOUBLE TAP & POSITION LOCK LOGIC ---
+constexpr long long kDoubleTapMaxDelayMs = 300; // Jeda maksimal antar ketukan untuk dibaca sebagai Double Tap (300ms)
 
-std::chrono::steady_clock::time_point g_touchStartTime;
-bool g_isRepositionMode = false; // True jika sudah melewati durasi long press
+bool g_isPositionLocked = true; // Default TERKUNCI (Aman untuk gameplay)
+std::chrono::steady_clock::time_point g_lastTapTime;
 
 int g_trackedPointerId = -1;
 float g_startX = 0.0f;
@@ -32,6 +30,8 @@ float g_startY = 0.0f;
 float g_lastY = 0.0f;
 
 bool OnTouch(const pl::input::TouchEvent& ev) {
+    auto now = std::chrono::steady_clock::now();
+
     switch (ev.action) {
         case kActionDown:
             if (g_trackedPointerId == -1 && zoom_button::Contains(ev.x, ev.y)) {
@@ -39,36 +39,41 @@ bool OnTouch(const pl::input::TouchEvent& ev) {
                 g_startX = ev.x;
                 g_startY = ev.y;
                 g_lastY = ev.y;
-                
-                // Catat waktu awal sentuhan & reset mode pindah
-                g_touchStartTime = std::chrono::steady_clock::now();
-                g_isRepositionMode = false;
-                
-                // LANGSUNG MULAI ZOOM (Instan saat disentuh)
-                zoom_controller::BeginZoom();
-                core::Log().info("TouchController: hold start (pointer {})", ev.pointerId);
+
+                // Hitung jeda dari ketukan sebelumnya
+                auto tapDeltaMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_lastTapTime).count();
+
+                // -------------------------------------------------------------
+                // CEK DOUBLE TAP: Jika diketuk 2x cepat (< 300ms)
+                // -------------------------------------------------------------
+                if (tapDeltaMs <= kDoubleTapMaxDelayMs) {
+                    g_isPositionLocked = !g_isPositionLocked; // Toggle Lock/Unlock
+
+                    if (g_isPositionLocked) {
+                        core::Log().info("TouchController: [LOCKED] Position locked for Zoom gameplay");
+                    } else {
+                        // Jika baru saja masuk Mode Reposition, matikan zoom
+                        zoom_controller::EndZoom();
+                        core::Log().info("TouchController: [UNLOCKED] Double-tap detected -> Reposition mode ACTIVE");
+                    }
+                }
+
+                // Jika tombol TERKUNCI -> Jalankan ZOOM
+                if (g_isPositionLocked) {
+                    zoom_controller::BeginZoom();
+                    core::Log().info("TouchController: Zoom started");
+                }
+
                 return true;
             }
             return false;
 
         case kActionMove:
             if (ev.pointerId == g_trackedPointerId) {
-                auto now = std::chrono::steady_clock::now();
-                std::chrono::duration<float> elapsed = now - g_touchStartTime;
-
-                // Cek apakah jari sudah menahan tombol melebihi batas waktu kLongPressDurationSec
-                if (!g_isRepositionMode && elapsed.count() >= kLongPressDurationSec) {
-                    g_isRepositionMode = true;
-                    
-                    // Batalkan zoom karena user berniat memindahkan posisi tombol
-                    zoom_controller::EndZoom(); 
-                    core::Log().info("TouchController: Long press ({:.1f}s) -> Switched to reposition mode", elapsed.count());
-                }
-
                 // -------------------------------------------------------------
-                // 1. MODE PINDAH TOMBOL (Terpemicu HANYA jika sudah tahan lama)
+                // 1. MODE PINDAH TOMBOL (HANYA AKTIF JIKA DI-DOUBLE TAP / UNLOCKED)
                 // -------------------------------------------------------------
-                if (g_isRepositionMode) {
+                if (!g_isPositionLocked) {
                     float dx = ev.x - g_startX;
                     float dy = ev.y - g_startY;
                     g_startX = ev.x;
@@ -81,12 +86,11 @@ bool OnTouch(const pl::input::TouchEvent& ev) {
                 }
 
                 // -------------------------------------------------------------
-                // 2. MODE ZOOM NORMAL (Langsung drag instan saat baru disentuh)
+                // 2. MODE ZOOM NORMAL (Saat TERKUNCI / LOCKED)
                 // -------------------------------------------------------------
                 float deltaY = g_lastY - ev.y;
                 g_lastY = ev.y;
                 zoom_controller::UpdateDrag(deltaY * kDragSign * kDragSensitivity);
-                core::Log().info("TouchController: deltaY={}", deltaY);
                 return true;
             }
             return false;
@@ -95,15 +99,12 @@ bool OnTouch(const pl::input::TouchEvent& ev) {
         case kActionCancel:
             if (ev.pointerId == g_trackedPointerId) {
                 g_trackedPointerId = -1;
-                
-                if (!g_isRepositionMode) {
+                g_lastTapTime = now; // Simpan waktu pelepasan jari untuk deteksi double-tap berikutnya
+
+                if (g_isPositionLocked) {
                     zoom_controller::EndZoom();
-                    core::Log().info("TouchController: hold end, releasing zoom");
-                } else {
-                    core::Log().info("TouchController: finished repositioning button");
                 }
-                
-                g_isRepositionMode = false;
+
                 return true;
             }
             return false;
