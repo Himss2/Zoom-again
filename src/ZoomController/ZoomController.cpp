@@ -8,12 +8,10 @@
 namespace zoom_controller {
 namespace {
 
-constexpr float kZoomLerpSpeed     = 0.25f;
-constexpr float kSnapEps           = 0.0005f;
-
-constexpr float kInitialZoomFactor = 0.30f; // Zoom awal saat ditekan (~70% zoom in)
-constexpr float kMinZoomLimit      = 0.03f; // Batas maksimal zoom in (ultra teleskopik)
-constexpr float kMaxZoomLimit      = 0.85f; // Batas minimal zoom in
+constexpr float kNeutralFactor     = 1.0f;  
+constexpr float kInitialZoomFactor = 0.30f; 
+constexpr float kMinZoomLimit      = 0.03f; 
+constexpr float kMaxZoomLimit      = 0.85f; 
 
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_releasing{false};
@@ -41,7 +39,6 @@ void UpdateDrag(float delta) {
     }
 
     float currentTarget = g_targetFactor.load(std::memory_order_relaxed);
-    // delta < 0 (drag ke atas) akan memperkecil targetFactor -> Zoom IN semakin dekat
     float newTarget = Clamp(currentTarget + delta);
     g_targetFactor.store(newTarget, std::memory_order_relaxed);
 }
@@ -57,19 +54,32 @@ void Tick() {
     }
 
     float target = g_targetFactor.load(std::memory_order_relaxed);
-    float diff = target - g_currentFactor;
+    bool isReleasing = g_releasing.load(std::memory_order_relaxed);
 
-    g_currentFactor += diff * kZoomLerpSpeed;
+    if (isReleasing) {
+        // =====================================================================
+        // FIX: TRANSISI KEMBALI KE FOV PLAYER TANPA PATAH
+        // =====================================================================
+        // Kecepatan kembalinya camera FOV
+        g_currentFactor += (target - g_currentFactor) * 0.40f;
 
-    if (g_releasing.load(std::memory_order_relaxed)) {
-        if (std::fabs(g_currentFactor - kNeutralFactor) < kSnapEps) {
+        // Ambang batas (threshold) pelepasan hook diperbesar (0.92f)
+        // Agar hook dilepas SAAT kamera sedang bergerak cepat menuju normal,
+        // sehingga game engine Minecraft melanjutkan sisa pergerakan FOV-nya
+        // sendiri tanpa ada jeda/tahanan kaku di 1.0f!
+        if (g_currentFactor >= 0.92f) {
             g_currentFactor = kNeutralFactor;
             g_active.store(false, std::memory_order_relaxed);
             g_releasing.store(false, std::memory_order_relaxed);
             
+            // Lepas override hook kamera secara mulus
             camera_hook::ClearOverride();
             return;
         }
+    } else {
+        // Logika saat Zoom In (ditekan / di-drag)
+        float diff = target - g_currentFactor;
+        g_currentFactor += diff * 0.25f;
     }
 
     camera_hook::SetOverride(g_currentFactor);
