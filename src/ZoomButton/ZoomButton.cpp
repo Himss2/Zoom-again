@@ -23,15 +23,15 @@ namespace {
 
 constexpr const char* kModuleId = "zoomrewrite.hud";
 
-// Ukuran dasar tombol
-constexpr float kBaseW = 100.0f;
-constexpr float kBaseH = 100.0f; // Dibuat agak membulat/presisi persegi seperti tombol pedang/crosshair
+// Ukuran persegi simetris khas tombol D-Pad / Action Touch Minecraft
+constexpr float kBaseW = 80.0f;
+constexpr float kBaseH = 80.0f;
 
-// WARNA GAYA MINECRAFT HUD (Hex ARGB)
-constexpr uint32_t kColorBgIdle     = 0x44000000u; // Hitam Transparan (Mirip Tombol MC)
-constexpr uint32_t kColorBgActive   = 0x77008800u; // Hijau Transparan saat ditekan
-constexpr uint32_t kColorBorder     = 0x55FFFFFFu; // Garis pinggir putih halus
-constexpr uint32_t kColorText       = 0xEEFFFFFFu; // Teks Putih Terang
+// WARNA GAYA TOUCH CONTROL MINECRAFT (ARGB)
+constexpr uint32_t kColorBorder      = 0x66FFFFFFu; // Border Putih Halus Transparan
+constexpr uint32_t kColorBgIdle      = 0x33000000u; // Glass Black Transparan
+constexpr uint32_t kColorBgActive    = 0x7700AA00u; // Hijau Transparan saat ditekan
+constexpr uint32_t kColorText        = 0xEEFFFFFFu; // Teks Putih Terang
 
 std::optional<pl::config::ConfigFile<ZoomButtonConfig>> g_config;
 
@@ -97,33 +97,33 @@ void Draw(bool isActive) {
     float s = g_config->value().scale;
     float w = kBaseW * s;
     float h = kBaseH * s;
+    float borderWidth = 2.0f * s; // Tebal garis pinggir
 
-    // Menyiapkan 3 elemen gambar: Background, Border, dan Teks
     std::array<pl::modmenu::DrawCommand, 3> commands{};
 
-    // 1. Background Kotak Utama (Transparan)
+    // 1. RECT OUTSIDE (Membentuk Border/Garis Pinggir)
     commands[0].type = pl::modmenu::DrawCommandType::RectFilled;
     commands[0].x = x;
     commands[0].y = y;
     commands[0].w = w;
     commands[0].h = h;
-    commands[0].color = isActive ? kColorBgActive : kColorBgIdle;
+    commands[0].color = kColorBorder;
 
-    // 2. Garis Pinggir / Border
-    commands[1].type = pl::modmenu::DrawCommandType::Rect;
-    commands[1].x = x;
-    commands[1].y = y;
-    commands[1].w = w;
-    commands[1].h = h;
-    commands[1].color = kColorBorder;
+    // 2. RECT INSIDE (Background Transparan di dalam Border)
+    commands[1].type = pl::modmenu::DrawCommandType::RectFilled;
+    commands[1].x = x + borderWidth;
+    commands[1].y = y + borderWidth;
+    commands[1].w = w - (borderWidth * 2.0f);
+    commands[1].h = h - (borderWidth * 2.0f);
+    commands[1].color = isActive ? kColorBgActive : kColorBgIdle;
 
-    // 3. Teks "ZM" di Tengah
+    // 3. TEKS "ZM" DI TENAH
     commands[2].type = pl::modmenu::DrawCommandType::Text;
     commands[2].x = x + w * 0.5f;
     commands[2].y = y + h * 0.5f;
     commands[2].text = "ZM";
     commands[2].color = kColorText;
-    commands[2].size = 20.0f * s;
+    commands[2].size = 18.0f * s;
 
     pl::modmenu::submitDrawCommands(kModuleId, commands);
 }
