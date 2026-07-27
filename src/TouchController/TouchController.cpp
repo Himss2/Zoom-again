@@ -27,8 +27,7 @@ bool OnTouch(const pl::input::TouchEvent& ev) {
                 g_trackedPointerId = ev.pointerId;
                 g_lastY = ev.y;
                 zoom_controller::BeginZoom();
-                core::Log().info("TouchController: hold start (pointer {})", ev.pointerId);
-                return true;
+                return true; // Tanpa log agar zero-latency
             }
             return false;
 
@@ -37,7 +36,7 @@ bool OnTouch(const pl::input::TouchEvent& ev) {
                 float deltaY = g_lastY - ev.y;
                 g_lastY = ev.y;
                 zoom_controller::UpdateDrag(deltaY * kDragSign * kDragSensitivity);
-                return true;
+                return true; // Dihapus Log().info(...) nya!
             }
             return false;
 
@@ -46,7 +45,6 @@ bool OnTouch(const pl::input::TouchEvent& ev) {
             if (ev.pointerId == g_trackedPointerId) {
                 g_trackedPointerId = -1;
                 zoom_controller::EndZoom();
-                core::Log().info("TouchController: hold end, releasing");
                 return true;
             }
             return false;
