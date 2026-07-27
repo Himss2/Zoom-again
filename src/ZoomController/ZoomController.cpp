@@ -11,8 +11,13 @@ namespace {
 constexpr float kReleaseLerpSpeed = 0.15f;
 constexpr float kReleaseSnapEps   = 0.01f;
 
-constexpr float kMinZoomLimit = 0.015f; 
-constexpr float kMaxZoomLimit = 1.0f;   
+// =============================================================================
+// UNLIMITED ZOOM IN
+// Set kMinZoomLimit ke 0.0001f (Mendekati 0) agar zoom-in tidak punya tembok pembatas.
+// Drag sejauh apapun akan terus memperbesar tampilan secara maksimal!
+// =============================================================================
+constexpr float kMinZoomLimit = 0.0001f; 
+constexpr float kMaxZoomLimit = 1.0f;   // Maksimal FOV Normal (1.0f)
 
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_releasing{false};
