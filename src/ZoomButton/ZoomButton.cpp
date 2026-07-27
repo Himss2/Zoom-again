@@ -7,27 +7,25 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <algorithm>
 
 namespace zoom_button {
 
-// NOT in an anonymous namespace: boost::pfr's field-name extraction
-// (used internally by pl::config::ConfigFile<T>) requires T to have
-// EXTERNAL linkage - a type declared inside an anonymous namespace has
-// internal linkage and fails to compile against boost::pfr's
-// fake_object/do_not_use_PFR_with_local_types mechanism.
 struct ZoomButtonConfig {
     int version = 1;
     bool showOverlay = true;
+    float x = 60.0f;
+    float y = 120.0f;
+    float scale = 1.0f; // Default scale (100%)
 };
 
 namespace {
 
 constexpr const char* kModuleId = "zoomrewrite.hud";
 
-constexpr float kZoneX = 60.0f;
-constexpr float kZoneY = 120.0f;
-constexpr float kZoneW = 150.0f;
-constexpr float kZoneH = 90.0f;
+// Ukuran dasar tombol sebelum di-scale
+constexpr float kBaseW = 150.0f;
+constexpr float kBaseH = 90.0f;
 
 constexpr uint32_t kColorIdle   = 0x88666666u;
 constexpr uint32_t kColorActive = 0x8800AA00u;
@@ -45,15 +43,14 @@ bool Install() {
         log.error("ZoomButton: config load failed");
         return false;
     }
-    log.info("ZoomButton: config loaded (showOverlay={})", g_config->value().showOverlay);
+    log.info("ZoomButton: config loaded (x={}, y={}, scale={})", 
+              g_config->value().x, g_config->value().y, g_config->value().scale);
 
-    // Ambil Mod ID dan berikan fallback jika string kosong
     std::string modIdStr = core::ModId();
     if (modIdStr.empty()) {
         modIdStr = "zoom_rewrite";
     }
 
-    // Registrasi ke ModMenu dengan ModuleBuilder SDK terbaru
     bool ok = pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
         .modId(modIdStr)
         .description("Hold + drag (same finger) to zoom, Flarial-style.")
@@ -73,29 +70,64 @@ void Uninstall() {
     pl::modmenu::unregisterModule(kModuleId);
 }
 
+float GetX() { return g_config ? g_config->value().x : 60.0f; }
+float GetY() { return g_config ? g_config->value().y : 120.0f; }
+float GetScale() { return g_config ? g_config->value().scale : 1.0f; }
+
+void SetPosition(float x, float y) {
+    if (g_config) {
+        g_config->value().x = x;
+        g_config->value().y = y;
+        g_config->save();
+    }
+}
+
+void SetScale(float scale) {
+    if (g_config) {
+        g_config->value().scale = std::clamp(scale, 0.5f, 3.0f); // Batas scale 50% - 300%
+        g_config->save();
+    }
+}
+
 void Draw(bool isActive) {
+    if (!g_config) return;
+
+    float x = g_config->value().x;
+    float y = g_config->value().y;
+    float s = g_config->value().scale;
+    float w = kBaseW * s;
+    float h = kBaseH * s;
+
     std::array<pl::modmenu::DrawCommand, 2> commands{};
 
     commands[0].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[0].x = kZoneX;
-    commands[0].y = kZoneY;
-    commands[0].w = kZoneW;
-    commands[0].h = kZoneH;
+    commands[0].x = x;
+    commands[0].y = y;
+    commands[0].w = w;
+    commands[0].h = h;
     commands[0].color = isActive ? kColorActive : kColorIdle;
 
     commands[1].type = pl::modmenu::DrawCommandType::Text;
-    commands[1].x = kZoneX + kZoneW * 0.5f;
-    commands[1].y = kZoneY + kZoneH * 0.5f;
+    commands[1].x = x + w * 0.5f;
+    commands[1].y = y + h * 0.5f;
     commands[1].text = "ZM";
     commands[1].color = kColorText;
-    commands[1].size = 24.0f;
+    commands[1].size = 24.0f * s;
 
     pl::modmenu::submitDrawCommands(kModuleId, commands);
 }
 
-bool Contains(float x, float y) {
-    return x >= kZoneX && x <= (kZoneX + kZoneW) &&
-           y >= kZoneY && y <= (kZoneY + kZoneH);
+bool Contains(float px, float py) {
+    if (!g_config) return false;
+
+    float x = g_config->value().x;
+    float y = g_config->value().y;
+    float s = g_config->value().scale;
+    float w = kBaseW * s;
+    float h = kBaseH * s;
+
+    return px >= x && px <= (x + w) &&
+           py >= y && py <= (y + h);
 }
 
 } // namespace zoom_button
