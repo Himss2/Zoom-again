@@ -25,11 +25,9 @@ namespace {
 
 constexpr const char* kModuleId = "zoomrewrite.hud";
 
-// Ukuran dasar tombol
 constexpr float kBaseW = 80.0f;
 constexpr float kBaseH = 80.0f;
 
-// Warna khas Minecraft UI
 constexpr uint32_t kColorBorder   = 0x66FFFFFFu;
 constexpr uint32_t kColorBgIdle   = 0x33000000u;
 constexpr uint32_t kColorBgActive = 0x7700AA00u;
@@ -37,9 +35,7 @@ constexpr uint32_t kColorText     = 0xEEFFFFFFu;
 
 std::optional<pl::config::ConfigFile<ZoomButtonConfig>> g_config;
 
-// -----------------------------------------------------------------------------
-// CALLBACK SAAT SLIDER DI GESER DI MOD MENU
-// -----------------------------------------------------------------------------
+// CALLBACK SLIDER (HANYA UPDATE VARIABLE IN-MEMORY, TANPA DISK I/O)
 void onConfigChanged(std::string_view moduleId, std::string_view key, std::string_view value) {
     if (moduleId != kModuleId || !g_config) return;
 
@@ -51,9 +47,7 @@ void onConfigChanged(std::string_view moduleId, std::string_view key, std::strin
     } else if (key == "scale") {
         g_config->value().scale = std::strtof(safeValue.c_str(), nullptr);
     }
-    
-    // Simpan posisi/scale baru ke file config
-    g_config->save();
+    // Dihapus g_config->save() dari sini agar game tidak patah-patah!
 }
 
 } // namespace
@@ -72,19 +66,14 @@ bool Install() {
         modIdStr = "zoom_rewrite";
     }
 
-    // Ambil nilai awal dari config file sebagai nilai default slider
     std::string strX = std::to_string(g_config->value().x);
     std::string strY = std::to_string(g_config->value().y);
     std::string strScale = std::to_string(g_config->value().scale);
 
-    // =========================================================================
-    // REGISTER MODULE DENGAN SLIDER SETTINGS (Ikon Roda Gigi Otomatis Muncul)
-    // =========================================================================
     bool ok = pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
         .modId(modIdStr)
         .description("Hold + drag to zoom in game.")
         .defaultEnabled(g_config->value().showOverlay)
-        // Menambahkan Slider Position X, Position Y, dan Scale
         .config("pos_x", "Position X", pl::modmenu::ConfigType::SliderFloat, strX, "0.0", "2500.0")
         .config("pos_y", "Position Y", pl::modmenu::ConfigType::SliderFloat, strY, "0.0", "1500.0")
         .config("scale", "Button Scale", pl::modmenu::ConfigType::SliderFloat, strScale, "0.5", "3.0")
@@ -96,11 +85,14 @@ bool Install() {
         return false;
     }
 
-    log.info("ZoomButton: registered module successfully with sliders");
     return true;
 }
 
 void Uninstall() {
+    // Simpan ke disk hanya saat mod di-uninstall/ditutup
+    if (g_config) {
+        g_config->save();
+    }
     pl::modmenu::unregisterModule(kModuleId);
 }
 
@@ -112,14 +104,12 @@ void SetPosition(float x, float y) {
     if (g_config) {
         g_config->value().x = x;
         g_config->value().y = y;
-        g_config->save();
     }
 }
 
 void SetScale(float scale) {
     if (g_config) {
         g_config->value().scale = std::clamp(scale, 0.5f, 3.0f);
-        g_config->save();
     }
 }
 
@@ -135,7 +125,6 @@ void Draw(bool isActive) {
 
     std::array<pl::modmenu::DrawCommand, 3> commands{};
 
-    // Border Luar
     commands[0].type = pl::modmenu::DrawCommandType::RectFilled;
     commands[0].x = x;
     commands[0].y = y;
@@ -143,7 +132,6 @@ void Draw(bool isActive) {
     commands[0].h = h;
     commands[0].color = kColorBorder;
 
-    // Background Dalam
     commands[1].type = pl::modmenu::DrawCommandType::RectFilled;
     commands[1].x = x + borderWidth;
     commands[1].y = y + borderWidth;
@@ -151,7 +139,6 @@ void Draw(bool isActive) {
     commands[1].h = h - (borderWidth * 2.0f);
     commands[1].color = isActive ? kColorBgActive : kColorBgIdle;
 
-    // Teks ZM
     commands[2].type = pl::modmenu::DrawCommandType::Text;
     commands[2].x = x + w * 0.5f;
     commands[2].y = y + h * 0.5f;
