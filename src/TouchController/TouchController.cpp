@@ -7,10 +7,7 @@
 #include <android/input.h>
 #include <atomic>
 
-// =============================================================================
-// FORWARD DECLARATION API INPUT PRELOADER
-// (Menghindari fatal error file header tidak ditemukan)
-// =============================================================================
+// Forward Declaration API Input Preloader
 namespace pl::legacy {
     using TouchListener = bool (*)(int action, int pointerId, float x, float y);
     bool registerTouchListener(TouchListener listener);
@@ -71,17 +68,16 @@ bool OnTouch(int action, int pointerId, float x, float y) {
 
 } // namespace
 
-bool Install() {
+void Install() {
     auto& log = core::Log();
 
     bool ok = pl::legacy::registerTouchListener(OnTouch);
     if (!ok) {
         log.error("TouchController: Gagal mendaftarkan Touch Listener");
-        return false;
+        return;
     }
 
     log.info("TouchController: Berhasil terpasang dengan Multi-Touch Passthrough");
-    return true;
 }
 
 void Uninstall() {
