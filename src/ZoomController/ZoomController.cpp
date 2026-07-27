@@ -8,20 +8,24 @@
 namespace zoom_controller {
 namespace {
 
-constexpr float kReleaseLerpSpeed = 0.15f;
-constexpr float kReleaseSnapEps   = 0.01f;
+// =============================================================================
+// ANIMATION SETTINGS
+// =============================================================================
+// kZoomLerpSpeed: Kecepatan animasi zoom (0.1f - 0.3f).
+// - Semakin kecil (misal 0.10f) = Animasi makin lembut / cinematis.
+// - Semakin besar (misal 0.30f) = Animasi makin responsif / cepat.
+constexpr float kZoomLerpSpeed = 0.18f; 
+constexpr float kSnapEps       = 0.0005f;
 
-// =============================================================================
-// UNLIMITED ZOOM IN
-// Set kMinZoomLimit ke 0.0001f (Mendekati 0) agar zoom-in tidak punya tembok pembatas.
-// Drag sejauh apapun akan terus memperbesar tampilan secara maksimal!
-// =============================================================================
-constexpr float kMinZoomLimit = 0.0001f; 
-constexpr float kMaxZoomLimit = 1.0f;   // Maksimal FOV Normal (1.0f)
+constexpr float kMinZoomLimit  = 0.0001f; 
+constexpr float kMaxZoomLimit  = 1.0f;   
 
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_releasing{false};
-std::atomic<float> g_factor{kNeutralFactor};
+
+// Target FOV (posisi tujuan) vs Current FOV (posisi animasi kamera saat ini)
+std::atomic<float> g_targetFactor{kNeutralFactor};
+float g_currentFactor = kNeutralFactor;
 
 float Clamp(float value) {
     if (value < kMinZoomLimit) return kMinZoomLimit;
@@ -32,10 +36,9 @@ float Clamp(float value) {
 } // namespace
 
 void BeginZoom() {
-    g_factor.store(kNeutralFactor, std::memory_order_relaxed);
+    g_targetFactor.store(kNeutralFactor, std::memory_order_relaxed);
     g_releasing.store(false, std::memory_order_relaxed);
     g_active.store(true, std::memory_order_relaxed);
-    camera_hook::SetOverride(kNeutralFactor);
 }
 
 void UpdateDrag(float delta) {
@@ -43,12 +46,14 @@ void UpdateDrag(float delta) {
         return;
     }
 
-    float f = Clamp(g_factor.load(std::memory_order_relaxed) + delta);
-    g_factor.store(f, std::memory_order_relaxed);
-    camera_hook::SetOverride(f);
+    // Geser nilai target FOV, animasi akan menyusul di fungsi Tick()
+    float newTarget = Clamp(g_targetFactor.load(std::memory_order_relaxed) + delta);
+    g_targetFactor.store(newTarget, std::memory_order_relaxed);
 }
 
 void EndZoom() {
+    // Kembalikan target FOV ke normal (1.0f) untuk animasi mereda
+    g_targetFactor.store(kNeutralFactor, std::memory_order_relaxed);
     g_releasing.store(true, std::memory_order_relaxed);
 }
 
@@ -56,23 +61,27 @@ void Tick() {
     if (!g_active.load(std::memory_order_relaxed)) {
         return;
     }
-    if (!g_releasing.load(std::memory_order_relaxed)) {
-        return;
+
+    float target = g_targetFactor.load(std::memory_order_relaxed);
+
+    // -------------------------------------------------------------------------
+    // SMOOTH LERP ANIMATION FRAME-BY-FRAME
+    // -------------------------------------------------------------------------
+    g_currentFactor += (target - g_currentFactor) * kZoomLerpSpeed;
+
+    // Jika sedang dilepas (releasing) dan kamera sudah hampir kembali ke FOV normal
+    if (g_releasing.load(std::memory_order_relaxed)) {
+        if (std::fabs(g_currentFactor - kNeutralFactor) < kSnapEps) {
+            g_currentFactor = kNeutralFactor;
+            g_active.store(false, std::memory_order_relaxed);
+            g_releasing.store(false, std::memory_order_relaxed);
+            camera_hook::ClearOverride();
+            return;
+        }
     }
 
-    float current = g_factor.load(std::memory_order_relaxed);
-    current += (kNeutralFactor - current) * kReleaseLerpSpeed;
-
-    if (std::fabs(current - kNeutralFactor) < kReleaseSnapEps) {
-        g_active.store(false, std::memory_order_relaxed);
-        g_releasing.store(false, std::memory_order_relaxed);
-        g_factor.store(kNeutralFactor, std::memory_order_relaxed);
-        camera_hook::ClearOverride();
-        return;
-    }
-
-    g_factor.store(current, std::memory_order_relaxed);
-    camera_hook::SetOverride(current);
+    // Terapkan FOV hasil animasi ke kamera
+    camera_hook::SetOverride(g_currentFactor);
 }
 
 bool IsActive() {
