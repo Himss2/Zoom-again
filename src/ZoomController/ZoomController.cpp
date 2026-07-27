@@ -14,8 +14,8 @@ namespace {
 constexpr float kZoomLerpSpeed     = 0.18f; // Kecepatan transisi animasi
 constexpr float kSnapEps           = 0.0005f;
 
-constexpr float kNeutralFactor     = 1.0f;  // FOV Normal Game
-constexpr float kInitialZoomFactor = 0.35f; // FOV Awal saat tombol BARU DITEKAN (Langsung Animasi Smooth)
+// Note: kNeutralFactor (1.0f) sudah terdefinisi dari ZoomController.hpp
+constexpr float kInitialZoomFactor = 0.35f; // FOV Awal saat tombol BARU DITEKAN (Smooth Animation)
 constexpr float kMinZoomLimit      = 0.0001f; 
 constexpr float kMaxZoomLimit      = 1.0f;   
 
@@ -35,7 +35,7 @@ float Clamp(float value) {
 
 void BeginZoom() {
     // Saat ditekan, target langsung diset ke kInitialZoomFactor.
-    // g_currentFactor (yang masih 1.0f) akan otomatis ter-animasi mulus di Tick()
+    // g_currentFactor (1.0f) akan otomatis ter-animasi mulus menuju target di Tick()
     g_targetFactor.store(kInitialZoomFactor, std::memory_order_relaxed);
     g_releasing.store(false, std::memory_order_relaxed);
     g_active.store(true, std::memory_order_relaxed);
@@ -52,7 +52,7 @@ void UpdateDrag(float delta) {
 }
 
 void EndZoom() {
-    // Saat dilepas, kembalikan target ke 1.0f agar ter-animasi balik secara smooth
+    // Saat dilepas, kembalikan target ke kNeutralFactor (1.0f)
     g_targetFactor.store(kNeutralFactor, std::memory_order_relaxed);
     g_releasing.store(true, std::memory_order_relaxed);
 }
@@ -65,7 +65,7 @@ void Tick() {
     float target = g_targetFactor.load(std::memory_order_relaxed);
 
     // -------------------------------------------------------------------------
-    // SMOOTH LERP INTERPOLATION (Setiap Frame)
+    // SMOOTH LERP INTERPOLATION
     // -------------------------------------------------------------------------
     g_currentFactor += (target - g_currentFactor) * kZoomLerpSpeed;
 
