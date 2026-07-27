@@ -53,19 +53,11 @@ bool Install() {
         modIdStr = "zoom_rewrite";
     }
 
-    // Registrasi ke LeviLaunchroid ModMenu dengan builder pattern lengkap
+    // Registrasi ke ModMenu dengan ModuleBuilder SDK terbaru
     bool ok = pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
         .modId(modIdStr)
-        .category("Render") // Wajib: Kategori di ModMenu LeviLaunchroid
         .description("Hold + drag (same finger) to zoom, Flarial-style.")
         .defaultEnabled(g_config->value().showOverlay)
-        .onToggle([](bool enabled) {
-            // Callback saat tombol di Mod Menu diklik/di-toggle
-            if (g_config) {
-                g_config->value().showOverlay = enabled;
-                g_config->save();
-            }
-        })
         .registerModule();
 
     if (!ok) {
