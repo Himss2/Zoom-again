@@ -32,7 +32,6 @@ constexpr uint32_t kColorActive = 0x8800AA00u;
 constexpr uint32_t kColorText   = 0xFFFFFFFFu;
 
 std::optional<pl::config::ConfigFile<ZoomButtonConfig>> g_config;
-bool g_isEditModeActive = false; // State internal untuk UI editor
 
 } // namespace
 
@@ -52,10 +51,20 @@ bool Install() {
         modIdStr = "zoom_rewrite";
     }
 
+    // =========================================================================
+    // MOD MENU MODULE BUILDER WITH SLIDERS
+    // =========================================================================
     bool ok = pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
         .modId(modIdStr)
         .description("Hold + drag (same finger) to zoom, Flarial-style.")
         .defaultEnabled(g_config->value().showOverlay)
+        // Slider Pengaturan Posisi & Ukuran
+        .addSlider("Position X", &g_config->value().x, 0.0f, 2500.0f, 10.0f)
+        .addSlider("Position Y", &g_config->value().y, 0.0f, 1500.0f, 10.0f)
+        .addSlider("Button Scale", &g_config->value().scale, 0.5f, 3.0f, 0.1f)
+        .onSave([]() {
+            if (g_config) g_config->save();
+        })
         .registerModule();
 
     if (!ok) {
@@ -119,7 +128,6 @@ void Draw(bool isActive) {
 }
 
 bool Contains(float px, float py) {
-    if (g_isEditModeActive) return false;
     if (!g_config) return false;
 
     float x = g_config->value().x;
