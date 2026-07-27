@@ -6,6 +6,7 @@
 #include <pl/ModMenu.hpp>
 #include <array>
 #include <optional>
+#include <string>
 
 namespace zoom_button {
 
@@ -13,9 +14,7 @@ namespace zoom_button {
 // (used internally by pl::config::ConfigFile<T>) requires T to have
 // EXTERNAL linkage - a type declared inside an anonymous namespace has
 // internal linkage and fails to compile against boost::pfr's
-// fake_object/do_not_use_PFR_with_local_types mechanism (that was the
-// actual cause of the earlier boost/pfr/detail compile error, not a
-// version incompatibility as first suspected).
+// fake_object/do_not_use_PFR_with_local_types mechanism.
 struct ZoomButtonConfig {
     int version = 1;
     bool showOverlay = true;
@@ -48,10 +47,25 @@ bool Install() {
     }
     log.info("ZoomButton: config loaded (showOverlay={})", g_config->value().showOverlay);
 
+    // Ambil Mod ID dan berikan fallback jika string kosong
+    std::string modIdStr = core::ModId();
+    if (modIdStr.empty()) {
+        modIdStr = "zoom_rewrite";
+    }
+
+    // Registrasi ke LeviLaunchroid ModMenu dengan builder pattern lengkap
     bool ok = pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
-        .modId(core::ModId())
+        .modId(modIdStr)
+        .category("Render") // Wajib: Kategori di ModMenu LeviLaunchroid
         .description("Hold + drag (same finger) to zoom, Flarial-style.")
         .defaultEnabled(g_config->value().showOverlay)
+        .onToggle([](bool enabled) {
+            // Callback saat tombol di Mod Menu diklik/di-toggle
+            if (g_config) {
+                g_config->value().showOverlay = enabled;
+                g_config->save();
+            }
+        })
         .registerModule();
 
     if (!ok) {
