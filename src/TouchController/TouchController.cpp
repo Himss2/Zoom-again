@@ -1,88 +1,74 @@
 #include "TouchController/TouchController.hpp"
 
 #include "Core/ModContext.hpp"
-#include "ZoomButton/ZoomButton.hpp"
 #include "ZoomController/ZoomController.hpp"
+#include "ZoomButton/ZoomButton.hpp"
 
-#include <android/input.h>
-#include <atomic>
-
-// Forward Declaration API Input Preloader
-namespace pl::legacy {
-    using TouchListener = bool (*)(int action, int pointerId, float x, float y);
-    bool registerTouchListener(TouchListener listener);
-    void unregisterTouchListener(TouchListener listener);
-}
+#include <pl/Input.hpp>
 
 namespace touch_controller {
 namespace {
 
-// ID jari yang sedang menekan tombol Zoom (-1 = tidak ada)
-std::atomic<int32_t> g_zoomPointerId{-1};
-float g_lastTouchY = 0.0f;
+// Kode Action Event Android (termasuk Multi-Touch Pointer)
+constexpr int kActionMask        = 0xFF;
+constexpr int kActionDown        = 0;
+constexpr int kActionUp          = 1;
+constexpr int kActionMove        = 2;
+constexpr int kActionCancel      = 3;
+constexpr int kActionPointerDown = 5;
+constexpr int kActionPointerUp   = 6;
 
-// =============================================================================
-// CALLBACK TOUCH EVENT (DENGAN MULTI-TOUCH PASSTHROUGH)
-// =============================================================================
-bool OnTouch(int action, int pointerId, float x, float y) {
-    int maskedAction = action & AMOTION_EVENT_ACTION_MASK;
+constexpr float kDragSensitivity = 0.005f;
+constexpr float kDragSign        = -1.0f;
 
-    // 1. Jari Menekan Layar (DOWN / POINTER_DOWN)
-    if (maskedAction == AMOTION_EVENT_ACTION_DOWN || maskedAction == AMOTION_EVENT_ACTION_POINTER_DOWN) {
-        if (g_zoomPointerId.load() == -1 && zoom_button::Contains(x, y)) {
-            g_zoomPointerId.store(pointerId);
-            g_lastTouchY = y;
-            
-            zoom_controller::BeginZoom();
-            return true; // Konsumsi event khusus untuk jari tombol zoom
-        }
+int g_trackedPointerId = -1;
+float g_lastY = 0.0f;
+
+bool OnTouch(const pl::input::TouchEvent& ev) {
+    // Isolasi jenis action menggunakan Bitmask Android Multi-touch
+    int action = ev.action & kActionMask;
+
+    switch (action) {
+        case kActionDown:
+        case kActionPointerDown:
+            // Hanya kunci jika belum ada jari zoom yang terdeteksi
+            if (g_trackedPointerId == -1 && zoom_button::Contains(ev.x, ev.y)) {
+                g_trackedPointerId = ev.pointerId;
+                g_lastY = ev.y;
+                zoom_controller::BeginZoom();
+                return true; // Konsumsi khusus jari tombol zoom
+            }
+            return false; // Jari lain diteruskan 100% ke Minecraft!
+
+        case kActionMove:
+            if (ev.pointerId == g_trackedPointerId) {
+                float deltaY = g_lastY - ev.y;
+                g_lastY = ev.y;
+                zoom_controller::UpdateDrag(deltaY * kDragSign * kDragSensitivity);
+                return true; // Konsumsi khusus drag zoom
+            }
+            return false; // Jari penggerak kamera diteruskan 100% ke Minecraft!
+
+        case kActionUp:
+        case kActionPointerUp:
+        case kActionCancel:
+            if (ev.pointerId == g_trackedPointerId) {
+                g_trackedPointerId = -1;
+                zoom_controller::EndZoom();
+                return true;
+            }
+            return false;
+
+        default:
+            return false;
     }
-
-    // 2. Jari Menggeser (MOVE)
-    else if (maskedAction == AMOTION_EVENT_ACTION_MOVE) {
-        int currentZoomPointer = g_zoomPointerId.load();
-        if (currentZoomPointer != -1 && pointerId == currentZoomPointer) {
-            float deltaY = (y - g_lastTouchY) * 0.0015f;
-            zoom_controller::UpdateDrag(deltaY);
-            g_lastTouchY = y;
-            return true; // Konsumsi event khusus untuk jari tombol zoom
-        }
-    }
-
-    // 3. Jari Diangkat (UP / POINTER_UP / CANCEL)
-    else if (maskedAction == AMOTION_EVENT_ACTION_UP || 
-             maskedAction == AMOTION_EVENT_ACTION_POINTER_UP || 
-             maskedAction == AMOTION_EVENT_ACTION_CANCEL) {
-        int currentZoomPointer = g_zoomPointerId.load();
-        if (currentZoomPointer != -1 && pointerId == currentZoomPointer) {
-            g_zoomPointerId.store(-1);
-            zoom_controller::EndZoom();
-            return true; // Konsumsi event khusus untuk jari tombol zoom
-        }
-    }
-
-    // Return false agar jari lain (seperti menggeser kamera / rotasi pandangan)
-    // DITERUSKAN 100% KE MINECRAFT!
-    return false;
 }
 
 } // namespace
 
 void Install() {
-    auto& log = core::Log();
-
-    bool ok = pl::legacy::registerTouchListener(OnTouch);
-    if (!ok) {
-        log.error("TouchController: Gagal mendaftarkan Touch Listener");
-        return;
-    }
-
-    log.info("TouchController: Berhasil terpasang dengan Multi-Touch Passthrough");
-}
-
-void Uninstall() {
-    pl::legacy::unregisterTouchListener(OnTouch);
-    g_zoomPointerId.store(-1);
+    pl::input::registerTouchCallback(OnTouch);
+    core::Log().info("TouchController: installed with multi-touch support");
 }
 
 } // namespace touch_controller
