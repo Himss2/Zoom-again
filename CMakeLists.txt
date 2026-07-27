@@ -38,10 +38,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(fmt)
 
+# Diperbarui ke branch 'main' agar mendukung ABI LeviMC Launcher v1.5.9+
 FetchContent_Declare(
     preloader_android
     GIT_REPOSITORY https://github.com/LiteLDev/preloader-android.git
-    GIT_TAG 0.2.3
+    GIT_TAG        main
 )
 FetchContent_MakeAvailable(preloader_android)
 
@@ -64,5 +65,3 @@ target_link_libraries(ZoomRewrite PRIVATE preloader nlohmann_json::nlohmann_json
 set_target_properties(ZoomRewrite PROPERTIES
     OUTPUT_NAME "ZoomRewrite"
 )
-
-
