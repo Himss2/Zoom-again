@@ -5,13 +5,22 @@
 #include "ZoomController/ZoomController.hpp"
 
 #include <android/input.h>
-#include <pl/legacy/LegacyInput.hpp>
 #include <atomic>
+
+// =============================================================================
+// FORWARD DECLARATION API INPUT PRELOADER
+// (Menghindari fatal error file header tidak ditemukan)
+// =============================================================================
+namespace pl::legacy {
+    using TouchListener = bool (*)(int action, int pointerId, float x, float y);
+    bool registerTouchListener(TouchListener listener);
+    void unregisterTouchListener(TouchListener listener);
+}
 
 namespace touch_controller {
 namespace {
 
-// ID jari spesifik yang sedang menekan tombol Zoom (-1 = tidak ada)
+// ID jari yang sedang menekan tombol Zoom (-1 = tidak ada)
 std::atomic<int32_t> g_zoomPointerId{-1};
 float g_lastTouchY = 0.0f;
 
@@ -21,14 +30,14 @@ float g_lastTouchY = 0.0f;
 bool OnTouch(int action, int pointerId, float x, float y) {
     int maskedAction = action & AMOTION_EVENT_ACTION_MASK;
 
-    // 1. Jari Menekan LayAR (DOWN / POINTER_DOWN)
+    // 1. Jari Menekan Layar (DOWN / POINTER_DOWN)
     if (maskedAction == AMOTION_EVENT_ACTION_DOWN || maskedAction == AMOTION_EVENT_ACTION_POINTER_DOWN) {
         if (g_zoomPointerId.load() == -1 && zoom_button::Contains(x, y)) {
             g_zoomPointerId.store(pointerId);
             g_lastTouchY = y;
             
             zoom_controller::BeginZoom();
-            return true; // Konsumsi event khusus jari ini saja
+            return true; // Konsumsi event khusus untuk jari tombol zoom
         }
     }
 
@@ -39,7 +48,7 @@ bool OnTouch(int action, int pointerId, float x, float y) {
             float deltaY = (y - g_lastTouchY) * 0.0015f;
             zoom_controller::UpdateDrag(deltaY);
             g_lastTouchY = y;
-            return true; // Konsumsi event khusus jari ini saja
+            return true; // Konsumsi event khusus untuk jari tombol zoom
         }
     }
 
@@ -51,12 +60,12 @@ bool OnTouch(int action, int pointerId, float x, float y) {
         if (currentZoomPointer != -1 && pointerId == currentZoomPointer) {
             g_zoomPointerId.store(-1);
             zoom_controller::EndZoom();
-            return true; // Konsumsi event khusus jari ini saja
+            return true; // Konsumsi event khusus untuk jari tombol zoom
         }
     }
 
-    // CRITICAL: Kembalikan false agar jari lain (seperti menggeser kamera) 
-    // langsung diteruskan 100% ke Minecraft!
+    // Return false agar jari lain (seperti menggeser kamera / rotasi pandangan)
+    // DITERUSKAN 100% KE MINECRAFT!
     return false;
 }
 
@@ -65,7 +74,6 @@ bool OnTouch(int action, int pointerId, float x, float y) {
 bool Install() {
     auto& log = core::Log();
 
-    // Mendaftarkan listener touch ke Preloader
     bool ok = pl::legacy::registerTouchListener(OnTouch);
     if (!ok) {
         log.error("TouchController: Gagal mendaftarkan Touch Listener");
