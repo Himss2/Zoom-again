@@ -51,20 +51,11 @@ bool Install() {
         modIdStr = "zoom_rewrite";
     }
 
-    // =========================================================================
-    // MOD MENU MODULE BUILDER WITH SLIDERS
-    // =========================================================================
+    // ModuleBuilder standar tanpa addSlider yang error
     bool ok = pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
         .modId(modIdStr)
         .description("Hold + drag (same finger) to zoom, Flarial-style.")
         .defaultEnabled(g_config->value().showOverlay)
-        // Slider Pengaturan Posisi & Ukuran
-        .addSlider("Position X", &g_config->value().x, 0.0f, 2500.0f, 10.0f)
-        .addSlider("Position Y", &g_config->value().y, 0.0f, 1500.0f, 10.0f)
-        .addSlider("Button Scale", &g_config->value().scale, 0.5f, 3.0f, 0.1f)
-        .onSave([]() {
-            if (g_config) g_config->save();
-        })
         .registerModule();
 
     if (!ok) {
