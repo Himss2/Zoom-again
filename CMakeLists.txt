@@ -49,6 +49,7 @@ FetchContent_MakeAvailable(preloader_android)
 add_library(ZoomRewrite SHARED
     src/Core/ModContext.cpp
     src/Core/ModEntry.cpp
+    src/Core/Config.cpp
     src/CameraHook/CameraHook.cpp
     src/ZoomController/ZoomController.cpp
     src/TouchController/TouchController.cpp
