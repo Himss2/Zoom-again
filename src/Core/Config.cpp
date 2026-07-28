@@ -2,6 +2,7 @@
 #include "Core/ModContext.hpp"
 
 #include <cstdlib>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <pl/Config.hpp>
@@ -10,18 +11,26 @@
 namespace config {
 
 Settings g_settings;
-static pl::config::ConfigFile<Settings> g_configFile;
+
+// Menggunakan pointer agar ConfigFile baru dibuat SETELAH core::Init() berjalan
+// (saat NativeMod::current() sudah valid & lokasi folder mod terdeteksi)
+static std::unique_ptr<pl::config::ConfigFile<Settings>> g_configFile;
 
 constexpr const char *kModuleId = "zoom_rewrite";
 
 void Load() {
-    g_configFile.load();
-    g_settings = g_configFile.value();
+    if (!g_configFile) {
+        g_configFile = std::make_unique<pl::config::ConfigFile<Settings>>();
+    }
+    g_configFile->load();
+    g_settings = g_configFile->value();
 }
 
 void Save() {
-    g_configFile.value() = g_settings;
-    g_configFile.save();
+    if (g_configFile) {
+        g_configFile->value() = g_settings;
+        g_configFile->save();
+    }
 }
 
 static void onConfigChanged(std::string_view moduleId, std::string_view key, std::string_view value) {
@@ -45,17 +54,23 @@ static void onConfigChanged(std::string_view moduleId, std::string_view key, std
 }
 
 void RegisterModMenu() {
-    std::string strX = std::to_string(g_settings.posX);
-    std::string strY = std::to_string(g_settings.posY);
-    std::string strScale = std::to_string(g_settings.scale);
+    // Muat konfigurasi tersimpan dari disk terlebih dahulu
+    Load();
+
+    // Konversi nilai tersimpan ke string untuk ditampilkan secara dinamis di Mod Menu UI
+    std::string strSpeed    = std::to_string(g_settings.zoomAnimSpeed);
+    std::string strHideHand = g_settings.hideHandOnZoom ? "1" : "0";
+    std::string strX        = std::to_string(g_settings.posX);
+    std::string strY        = std::to_string(g_settings.posY);
+    std::string strScale    = std::to_string(g_settings.scale);
 
     (void)pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
         .description("Flarial-style smooth zoom & overlay settings")
         .defaultEnabled(true)
         .config("zoomAnimSpeed", "Kecepatan Zoom",
-                pl::modmenu::ConfigType::SliderInt, "5", "1", "10")
+                pl::modmenu::ConfigType::SliderInt, strSpeed, "1", "10")
         .config("hideHandOnZoom", "Sembunyikan Tangan",
-                pl::modmenu::ConfigType::Radio, "1", "Matikan,Aktif")
+                pl::modmenu::ConfigType::Radio, strHideHand, "Matikan,Aktif")
         .config("pos_x", "Posisi X Tombol", 
                 pl::modmenu::ConfigType::SliderFloat, strX, "0.0", "2500.0")
         .config("pos_y", "Posisi Y Tombol", 
