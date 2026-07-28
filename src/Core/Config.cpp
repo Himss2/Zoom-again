@@ -12,7 +12,8 @@ namespace config {
 Settings g_settings;
 static pl::config::ConfigFile<Settings> g_configFile;
 
-constexpr const char *kModuleId = "zoom_rewrite.settings";
+// Gunakan ID utama mod kamu agar opsi pengaturan menyatu di tombol Gear card utama
+constexpr const char *kModuleId = "zoom_rewrite";
 
 void Load() {
     g_configFile.load();
@@ -41,8 +42,8 @@ static void onConfigChanged(std::string_view moduleId, std::string_view key, std
 }
 
 void RegisterModMenu() {
-    (void)pl::modmenu::ModuleBuilder(kModuleId, "Zoom Settings")
-        .description("Atur kecepatan zoom dan opsi tampilan")
+    (void)pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
+        .description("Flarial-style smooth zoom mod")
         .defaultEnabled(true)
         .config("zoomAnimSpeed", "Kecepatan Zoom",
                 pl::modmenu::ConfigType::SliderInt, "5", "1", "10")
