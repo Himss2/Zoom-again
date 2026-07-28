@@ -4,7 +4,9 @@
 #include "Core/ModContext.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
+#include <algorithm>
 
 namespace zoom_controller {
 namespace {
@@ -19,17 +21,24 @@ std::atomic<bool> g_releasing{false};
 std::atomic<float> g_targetFactor{kNeutralFactor};
 float g_currentFactor = kNeutralFactor;
 
+// Tracking waktu untuk animasi release
+using Clock = std::chrono::steady_clock;
+Clock::time_point g_releaseStartTime;
+float g_releaseStartFactor = kNeutralFactor;
+float g_releaseDurationMs = 150.0f;
+
 float Clamp(float value) {
-    if (value < kMinZoomLimit) return kMinZoomLimit;
-    if (value > kMaxZoomLimit) return kMaxZoomLimit;
-    return value;
+    return std::clamp(value, kMinZoomLimit, kMaxZoomLimit);
+}
+
+// Formula Cubic Ease-Out: Melambat secara mulus persis sebelum menyentuh FOV normal (1.0)
+float EaseOutCubic(float t) {
+    float f = 1.0f - t;
+    return 1.0f - (f * f * f);
 }
 
 void PlaySpyglassSound(bool isStart) {
     if (!config::g_settings.enableSpyglassSound) return;
-    
-    // Catatan: Untuk memainkan suara native Minecraft secara langsung, 
-    // dibutuhkan panggilan simbol SoundPlayer/Level::playSound dari game.
     if (isStart) {
         core::Log().info("ZoomController: Playing spyglass.use sound");
     } else {
@@ -39,7 +48,6 @@ void PlaySpyglassSound(bool isStart) {
 
 void UpdateHandVisibility(bool hide) {
     if (!config::g_settings.hideHandOnZoom) return;
-
     if (hide) {
         core::Log().info("ZoomController: Hiding player hand");
     } else {
@@ -69,9 +77,16 @@ void UpdateDrag(float delta) {
 }
 
 void EndZoom() {
-    g_targetFactor.store(kNeutralFactor, std::memory_order_relaxed);
-    g_releasing.store(true, std::memory_order_relaxed);
+    if (!g_active.load(std::memory_order_relaxed)) return;
 
+    g_releaseStartFactor = g_currentFactor;
+    g_releaseStartTime = Clock::now();
+    
+    // Kalkulasi durasi animasi berdasarkan setting kecepatan (Zoom Speed 1-10)
+    float animSpeedSetting = static_cast<float>(config::g_settings.zoomAnimSpeed);
+    g_releaseDurationMs = std::clamp(300.0f - (animSpeedSetting * 20.0f), 80.0f, 280.0f);
+
+    g_releasing.store(true, std::memory_order_relaxed);
     PlaySpyglassSound(false);
 }
 
@@ -80,24 +95,16 @@ void Tick() {
         return;
     }
 
-    float speedMultiplier = static_cast<float>(config::g_settings.zoomAnimSpeed) * 0.045f;
-    float target = g_targetFactor.load(std::memory_order_relaxed);
     bool isReleasing = g_releasing.load(std::memory_order_relaxed);
 
     if (isReleasing) {
-        float diff = target - g_currentFactor;
-        float step = diff * speedMultiplier;
+        auto now = Clock::now();
+        float elapsedMs = std::chrono::duration<float, std::milli>(now - g_releaseStartTime).count();
+        float progress = elapsedMs / g_releaseDurationMs;
 
-        constexpr float kMinStep = 0.02f;
-        if (step < kMinStep) {
-            step = kMinStep;
-        }
-
-        g_currentFactor += step;
-
-        if (g_currentFactor >= 0.98f) {
+        if (progress >= 1.0f) {
+            // Animasi selesai: Tepat di 1.0f (100% FOV Normal Player), kembalikan kontrol ke game
             g_currentFactor = kNeutralFactor;
-            
             camera_hook::SetOverride(kNeutralFactor);
 
             g_active.store(false, std::memory_order_relaxed);
@@ -107,9 +114,17 @@ void Tick() {
             camera_hook::ClearOverride();
             return;
         }
+
+        // Terapkan kurva Ease-Out
+        float easedProgress = EaseOutCubic(progress);
+        g_currentFactor = g_releaseStartFactor + (kNeutralFactor - g_releaseStartFactor) * easedProgress;
     } else {
-        float diff = target - g_currentFactor;
-        g_currentFactor += diff * speedMultiplier;
+        // Saat tombol ditahan/di-drag: transisi halus menuju target zoom
+        float animSpeedSetting = static_cast<float>(config::g_settings.zoomAnimSpeed);
+        float speedMultiplier = std::clamp(animSpeedSetting * 0.04f, 0.05f, 0.4f);
+        float target = g_targetFactor.load(std::memory_order_relaxed);
+        
+        g_currentFactor += (target - g_currentFactor) * speedMultiplier;
     }
 
     camera_hook::SetOverride(g_currentFactor);
