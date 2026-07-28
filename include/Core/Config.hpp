@@ -4,9 +4,9 @@ namespace config {
 
 struct Settings {
     int version = 1;                  // Wajib untuk TypedConfig concept Preloader SDK
-    int zoomAnimSpeed = 5;            // Slider Kecepatan Animasi (1 - 10)
-    bool enableSpyglassSound = true;  // Toggle Suara Spyglass
-    bool hideHandOnZoom = true;       // Toggle Sembunyikan Tangan saat Zoom
+    int zoomAnimSpeed = 5;            // Kecepatan animasi zoom (1 - 10)
+    bool enableSpyglassSound = true;  // Toggle suara spyglass
+    bool hideHandOnZoom = true;       // Toggle sembunyikan tangan saat zoom
 };
 
 extern Settings g_settings;
