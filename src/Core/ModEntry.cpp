@@ -1,17 +1,4 @@
 // Core/ModEntry.cpp
-//
-// Attempt to resolve Blocker #1 by matching the OFFICIAL documented
-// pattern exactly (levilaunchroid.levimc.org/guide/developer), which
-// differs from every previous attempt in three ways simultaneously:
-//   1. Uses pl::modmenu::ModuleBuilder(...).registerModule(), not the
-//      raw ModuleInfo{} + pl::modmenu::registerModule(module) call.
-//   2. Registers the Mod Menu module from enable(), not load().
-//   3. Loads a pl::config::ConfigFile first - the checklist says
-//      "Load config before registering runtime UI," which we never
-//      did in any earlier attempt.
-//
-// core::Init() MUST be the very first call in load() - see
-// Core/ModContext.hpp for why.
 
 #include "Core/ModContext.hpp"
 #include "Core/Config.hpp"
@@ -33,34 +20,43 @@ public:
         core::Init(); // MUST be first - see Core/ModContext.hpp
 
         auto& log = core::Log();
-        log.info("Core: load() start (official ModuleBuilder+Config pattern test)");
+        log.info("Core: load() start");
 
-        // 1. Load config file terlebih dahulu sesuai petunjuk checklist
+        // 1. Load config & register touch callback
         config::Load();
-
-        if (!camera_hook::Install()) {
-            log.error("Core: CameraHook::Install() failed, aborting load()");
-            return false;
-        }
-
         touch_controller::Install();
 
+        // Register tick callback
         camera_hook::SetFrameTickCallback([]() {
             zoom_controller::Tick();
             zoom_button::Draw(zoom_controller::IsActive());
         });
+
+        // CATATAN: camera_hook::Install() Sengaja DIPINDAHKAN ke enable()
+        // agar tidak membenturkan VTable CameraAPI saat Inbuilt Zoom Mod melakukan nativeInit().
 
         log.info("Core: load() done");
         return true;
     }
 
     bool enable() {
-        // 2. Registrasi UI Mod Menu di dalam enable()
+        auto& log = core::Log();
+
+        // 2. Registrasi UI Mod Menu
         config::RegisterModMenu();
+
+        // 3. Pasang CameraHook HANYA SETELAH Inbuilt Mods selesai init!
+        if (!camera_hook::Install()) {
+            log.error("Core: CameraHook::Install() failed during enable()");
+            return false;
+        }
+
         return zoom_button::Install();
     }
 
     bool disable() {
+        // Lepas hook saat mod di-disable agar memori tetap bersih
+        camera_hook::Uninstall();
         zoom_button::Uninstall();
         return true;
     }
