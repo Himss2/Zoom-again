@@ -12,7 +12,7 @@ namespace config {
 Settings g_settings;
 static pl::config::ConfigFile<Settings> g_configFile;
 
-// Gunakan ID utama mod kamu agar opsi pengaturan menyatu di tombol Gear card utama
+// ID utama mod agar menyatu dengan card utama
 constexpr const char *kModuleId = "zoom_rewrite";
 
 void Load() {
@@ -30,6 +30,7 @@ static void onConfigChanged(std::string_view moduleId, std::string_view key, std
 
     const std::string safeValue(value);
     
+    // --- Fitur Animasi & Efek ---
     if (key == "zoomAnimSpeed") {
         g_settings.zoomAnimSpeed = std::atoi(safeValue.c_str());
     } else if (key == "enableSpyglassSound") {
@@ -37,20 +38,30 @@ static void onConfigChanged(std::string_view moduleId, std::string_view key, std
     } else if (key == "hideHandOnZoom") {
         g_settings.hideHandOnZoom = (safeValue == "1" || safeValue == "true");
     }
+    // --- Fitur Tombol / HUD ---
+    else if (key == "showZoomButton") {
+        g_settings.showZoomButton = (safeValue == "1" || safeValue == "true");
+    }
 
     Save();
 }
 
 void RegisterModMenu() {
     (void)pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
-        .description("Flarial-style smooth zoom mod")
+        .description("Flarial-style smooth zoom mod dengan pengaturan kustom")
         .defaultEnabled(true)
+        // === PENGATURAN TOMBOL / HUD ===
+        .config("showZoomButton", "Tampilkan Tombol Zoom",
+                pl::modmenu::ConfigType::Radio, "1", "Sembunyikan,Tampilkan")
+        
+        // === PENGATURAN ANIMASI & EFEK ===
         .config("zoomAnimSpeed", "Kecepatan Zoom",
                 pl::modmenu::ConfigType::SliderInt, "5", "1", "10")
         .config("enableSpyglassSound", "Suara Spyglass",
                 pl::modmenu::ConfigType::Radio, "1", "Matikan,Aktif")
         .config("hideHandOnZoom", "Sembunyikan Tangan",
                 pl::modmenu::ConfigType::Radio, "1", "Matikan,Aktif")
+        
         .onConfigChanged(onConfigChanged)
         .registerModule();
 }
