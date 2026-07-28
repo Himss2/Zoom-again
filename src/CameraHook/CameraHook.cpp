@@ -1,6 +1,8 @@
 #include "CameraHook/CameraHook.hpp"
 
+#include "Core/Config.hpp"
 #include "Core/ModContext.hpp"
+#include "ZoomController/ZoomController.hpp"
 
 #include <pl/memory/Hook.hpp>
 #include <pl/memory/Vtable.hpp>
@@ -12,13 +14,22 @@ namespace {
 
 constexpr const char* kTypeInfoCameraAPI = "9CameraAPI";
 constexpr size_t      kTryGetFOVSlot     = 7;
+
+constexpr const char* kTypeInfoOptions   = "7Options";
+constexpr size_t      kGetHideHandSlot   = 23; // VTable slot untuk Options::getHideHand
+
 constexpr const char* kMinecraftModule   = "libminecraftpe.so";
 
-using TryGetFOVFn = uint64_t (*)(void*);
-TryGetFOVFn g_origTryGetFOV = nullptr;
-void* g_target = nullptr;
+using TryGetFOVFn   = uint64_t (*)(void*);
+using GetHideHandFn = bool (*)(void*);
 
-std::atomic<bool> g_hasOverride{false};
+TryGetFOVFn   g_origTryGetFOV   = nullptr;
+GetHideHandFn g_origGetHideHand = nullptr;
+
+void* g_targetCamera   = nullptr;
+void* g_targetHideHand = nullptr;
+
+std::atomic<bool>  g_hasOverride{false};
 std::atomic<float> g_overrideValue{1.0f};
 
 std::function<void()> g_tickCallback;
@@ -30,7 +41,8 @@ uint64_t PackFov(bool hasValue, float value) {
     return (hi << 32) | bits;
 }
 
-uint64_t Detour(void* thisPtr) {
+// Detour untuk kalkulasi FOV Kamera
+uint64_t DetourFOV(void* thisPtr) {
     if (g_tickCallback) {
         g_tickCallback();
     }
@@ -42,42 +54,82 @@ uint64_t Detour(void* thisPtr) {
     return PackFov(true, g_overrideValue.load(std::memory_order_relaxed));
 }
 
+// Detour untuk status Sembunyikan Tangan (Hide Hand)
+bool DetourHideHand(void* thisPtr) {
+    if (zoom_controller::IsActive() && config::g_settings.hideHandOnZoom) {
+        return true; // Force hide hand saat zoom aktif
+    }
+    
+    if (g_origGetHideHand) {
+        return g_origGetHideHand(thisPtr);
+    }
+    return false;
+}
+
 } // namespace
 
 bool Install() {
     auto& log = core::Log();
 
-    g_target = reinterpret_cast<void*>(
+    // 1. Hook CameraAPI::tryGetFOV
+    g_targetCamera = reinterpret_cast<void*>(
         pl::memory::resolveVtableFunction(kTypeInfoCameraAPI, kTryGetFOVSlot, kMinecraftModule));
 
-    if (!g_target) {
-        log.error("CameraHook: failed to resolve CameraAPI::tryGetFOV - hook not installed");
+    if (!g_targetCamera) {
+        log.error("CameraHook: failed to resolve CameraAPI::tryGetFOV");
         return false;
     }
 
-    void* originalOut = nullptr;
-    int result = pl::memory::hook(
-        g_target,
-        reinterpret_cast<void*>(Detour),
-        &originalOut,
+    void* origCamOut = nullptr;
+    int resCam = pl::memory::hook(
+        g_targetCamera,
+        reinterpret_cast<void*>(DetourFOV),
+        &origCamOut,
         pl::memory::HookPriority::Normal);
 
-    if (result != 0) {
-        log.error("CameraHook: pl::memory::hook failed, code={}", result);
-        g_target = nullptr;
+    if (resCam != 0) {
+        log.error("CameraHook: pl::memory::hook (FOV) failed, code={}", resCam);
+        g_targetCamera = nullptr;
         return false;
     }
+    g_origTryGetFOV = reinterpret_cast<TryGetFOVFn>(origCamOut);
 
-    g_origTryGetFOV = reinterpret_cast<TryGetFOVFn>(originalOut);
-    log.info("CameraHook: installed on CameraAPI::tryGetFOV at 0x{:x}",
-             reinterpret_cast<uintptr_t>(g_target));
+    // 2. Hook Options::getHideHand (Fitur Hide Hand)
+    g_targetHideHand = reinterpret_cast<void*>(
+        pl::memory::resolveVtableFunction(kTypeInfoOptions, kGetHideHandSlot, kMinecraftModule));
+
+    if (g_targetHideHand) {
+        void* origHideOut = nullptr;
+        int resHide = pl::memory::hook(
+            g_targetHideHand,
+            reinterpret_cast<void*>(DetourHideHand),
+            &origHideOut,
+            pl::memory::HookPriority::Normal);
+
+        if (resHide == 0) {
+            g_origGetHideHand = reinterpret_cast<GetHideHandFn>(origHideOut);
+            log.info("CameraHook: installed Options::getHideHand hook at 0x{:x}",
+                     reinterpret_cast<uintptr_t>(g_targetHideHand));
+        } else {
+            log.warn("CameraHook: failed to hook Options::getHideHand (code={}), feature disabled gracefully", resHide);
+        }
+    } else {
+        log.warn("CameraHook: failed to resolve Options::getHideHand, feature disabled gracefully");
+    }
+
+    log.info("CameraHook: installed successfully on CameraAPI::tryGetFOV at 0x{:x}",
+             reinterpret_cast<uintptr_t>(g_targetCamera));
     return true;
 }
 
 void Uninstall() {
-    if (g_target) {
-        pl::memory::unhook(g_target, reinterpret_cast<void*>(Detour));
-        g_target = nullptr;
+    if (g_targetCamera) {
+        pl::memory::unhook(g_targetCamera, reinterpret_cast<void*>(DetourFOV));
+        g_targetCamera = nullptr;
+    }
+    if (g_targetHideHand) {
+        pl::memory::unhook(g_targetHideHand, reinterpret_cast<void*>(DetourHideHand));
+        g_targetHideHand = nullptr;
     }
 }
 
