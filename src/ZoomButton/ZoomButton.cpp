@@ -12,13 +12,14 @@ namespace {
 
 constexpr const char* kModuleId = "zoom_rewrite";
 
-constexpr float kBaseW = 75.0f;
-constexpr float kBaseH = 75.0f;
+constexpr float kBaseW = 68.0f;
+constexpr float kBaseH = 68.0f;
 
-// Helper untuk menerapkan Alpha (0-100%) ke warna RGB Hex
-uint32_t ApplyAlpha(uint32_t rgbColor, int opacityPercent) {
-    uint32_t alpha = (static_cast<uint32_t>(opacityPercent) * 255u / 100u) & 0xFFu;
-    return (alpha << 24) | (rgbColor & 0x00FFFFFFu);
+// Helper untuk menghasilkan warna ARGB sesuai tingkat transparansi
+inline uint32_t MakeColor(uint8_t r, uint8_t g, uint8_t b, float alphaMultiplier, int opacityPercent) {
+    float userAlpha = static_cast<float>(opacityPercent) / 100.0f;
+    uint32_t a = static_cast<uint32_t>(std::clamp(alphaMultiplier * userAlpha * 255.0f, 0.0f, 255.0f));
+    return (a << 24) | (static_cast<uint32_t>(r) << 16) | (static_cast<uint32_t>(g) << 8) | static_cast<uint32_t>(b);
 }
 
 } // namespace
@@ -51,63 +52,98 @@ void Draw(bool isActive) {
     float s = config::g_settings.scale;
     float w = kBaseW * s;
     float h = kBaseH * s;
-    float b = 3.0f * s; // Ketebalan Bevel 3D
 
-    int op = config::g_settings.opacity;
+    int userOpacity = config::g_settings.opacity;
 
-    // Skema Warna Tombol Minecraft UI Native (ARGB)
-    uint32_t colBlackFrame = ApplyAlpha(0x000000, op);
-    
-    // Saat Active (Pressed): Bevel terbalik (Atas/Kiri Gelap, Bawah/Kanan Terang)
-    uint32_t colHighlight  = ApplyAlpha(isActive ? 0x373737 : 0xFFFFFF, op); // Terang / Gelap
-    uint32_t colShadow     = ApplyAlpha(isActive ? 0xFFFFFF : 0x373737, op); // Gelap / Terang
-    uint32_t colFill       = ApplyAlpha(isActive ? 0x555555 : 0x8B8B8B, op); // Isian Abu-abu MC
-    uint32_t colText       = ApplyAlpha(isActive ? 0xFFFF55 : 0xFFFFFF, op); // Teks Kuning saat ditekan
+    // Ukuran Potongan Piksel Sudut (Pixel-Art Notch Step)
+    // Disesuaikan dengan skala agar tetap tampak proporsional seperti piksel Minecraft
+    float pStep  = std::max(2.0f, 2.5f * s); // Ukuran notch luar
+    float b      = 1.5f * s;                 // Ketebalan border
+    float ipStep = std::max(1.0f, 1.5f * s); // Ukuran notch dalam
 
-    std::array<pl::modmenu::DrawCommand, 7> commands{};
+    // Warna Touch HUD Native Minecraft
+    uint32_t colBorder = MakeColor(0x6E, 0x6E, 0x6E, isActive ? 0.65f : 0.40f, userOpacity); // Garis Tepi
+    uint32_t colFill   = MakeColor(0x1C, 0x1C, 0x1C, isActive ? 0.70f : 0.35f, userOpacity); // Latar Belakang
+    uint32_t colText   = MakeColor(0xE0, 0xE0, 0xE0, isActive ? 1.00f : 0.75f, userOpacity); // Teks Utama
+    uint32_t colShadow = MakeColor(0x3F, 0x3F, 0x3F, isActive ? 0.80f : 0.50f, userOpacity); // Bayangan Teks MC
 
-    // 1. Bingkai Hitam Luar (Outer Border)
+    std::array<pl::modmenu::DrawCommand, 8> commands{};
+
+    // =========================================================================
+    // 1. PIXELATED OUTER BORDER (Dipotong Tangga Piksel di 4 Sudut)
+    // =========================================================================
+    // Strip Atas
     commands[0].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[0].x = x; commands[0].y = y; commands[0].w = w; commands[0].h = h;
-    commands[0].color = colBlackFrame;
+    commands[0].x = x + pStep; commands[0].y = y;
+    commands[0].w = w - (pStep * 2.0f); commands[0].h = pStep;
+    commands[0].color = colBorder;
 
-    // 2. Isian Utama (Center Fill)
+    // Strip Tengah Utama
     commands[1].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[1].x = x + b; commands[1].y = y + b;
-    commands[1].w = w - (b * 2.0f); commands[1].h = h - (b * 2.0f);
-    commands[1].color = colFill;
+    commands[1].x = x; commands[1].y = y + pStep;
+    commands[1].w = w; commands[1].h = h - (pStep * 2.0f);
+    commands[1].color = colBorder;
 
-    // 3. Bevel 3D Atas (Top Edge)
+    // Strip Bawah
     commands[2].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[2].x = x + b; commands[2].y = y + b;
-    commands[2].w = w - (b * 2.0f); commands[2].h = b;
-    commands[2].color = colHighlight;
+    commands[2].x = x + pStep; commands[2].y = y + h - pStep;
+    commands[2].w = w - (pStep * 2.0f); commands[2].h = pStep;
+    commands[2].color = colBorder;
 
-    // 4. Bevel 3D Kiri (Left Edge)
+    // =========================================================================
+    // 2. PIXELATED INNER FILL (Isian Dalam Bertangga Piksel)
+    // =========================================================================
+    float ix = x + b;
+    float iy = y + b;
+    float iw = w - (b * 2.0f);
+    float ih = h - (b * 2.0f);
+
+    // Strip Dalam Atas
     commands[3].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[3].x = x + b; commands[3].y = y + b;
-    commands[3].w = b; commands[3].h = h - (b * 2.0f);
-    commands[3].color = colHighlight;
+    commands[3].x = ix + ipStep; commands[3].y = iy;
+    commands[3].w = iw - (ipStep * 2.0f); commands[3].h = ipStep;
+    commands[3].color = colFill;
 
-    // 5. Bevel 3D Bawah (Bottom Edge)
+    // Strip Dalam Tengah
     commands[4].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[4].x = x + b; commands[4].y = y + h - (b * 2.0f);
-    commands[4].w = w - (b * 2.0f); commands[4].h = b;
-    commands[4].color = colShadow;
+    commands[4].x = ix; commands[4].y = iy + ipStep;
+    commands[4].w = iw; commands[4].h = ih - (ipStep * 2.0f);
+    commands[4].color = colFill;
 
-    // 6. Bevel 3D Kanan (Right Edge)
+    // Strip Dalam Bawah
     commands[5].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[5].x = x + w - (b * 2.0f); commands[5].y = y + b;
-    commands[5].w = b; commands[5].h = h - (b * 2.0f);
-    commands[5].color = colShadow;
+    commands[5].x = ix + ipStep; commands[5].y = iy + ih - ipStep;
+    commands[5].w = iw - (ipStep * 2.0f); commands[5].h = ipStep;
+    commands[5].color = colFill;
 
-    // 7. Teks "ZM" di Tengah
+    // =========================================================================
+    // 3. TEKS "ZM" TEPAT DI TENGAH DENGAN DROP SHADOW
+    // =========================================================================
+    float fontSize = 15.0f * s;
+    float textCenterX = x + (w * 0.5f);
+    float textCenterY = y + (h * 0.5f);
+
+    float halfTextWidth  = fontSize * 0.55f;
+    float halfTextHeight = fontSize * 0.40f;
+
+    float textX = textCenterX - halfTextWidth;
+    float textY = textCenterY - halfTextHeight;
+
+    // Bayangan Teks MC (Offset +1px)
     commands[6].type = pl::modmenu::DrawCommandType::Text;
-    commands[6].x = x + w * 0.5f;
-    commands[6].y = y + h * 0.5f;
+    commands[6].x = textX + (1.2f * s);
+    commands[6].y = textY + (1.2f * s);
     commands[6].text = "ZM";
-    commands[6].color = colText;
-    commands[6].size = 18.0f * s;
+    commands[6].color = colShadow;
+    commands[6].size = fontSize;
+
+    // Teks Utama "ZM"
+    commands[7].type = pl::modmenu::DrawCommandType::Text;
+    commands[7].x = textX;
+    commands[7].y = textY;
+    commands[7].text = "ZM";
+    commands[7].color = colText;
+    commands[7].size = fontSize;
 
     pl::modmenu::submitDrawCommands(kModuleId, commands);
 }
