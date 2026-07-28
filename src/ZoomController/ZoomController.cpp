@@ -84,12 +84,24 @@ void Tick() {
     bool isReleasing = g_releasing.load(std::memory_order_relaxed);
 
     if (isReleasing) {
-        // Smooth Lerp kembali ke 1.0f
-        g_currentFactor += (target - g_currentFactor) * speedMultiplier;
+        float diff = target - g_currentFactor;
+        float step = diff * speedMultiplier;
 
-        // Toleransi 0.995f agar transisi zoom-out tuntas 100% mulus tanpa kaget
-        if (g_currentFactor >= 0.995f) {
+        // Batas kecepatan minimal agar animasi tidak melambat/patah di ujung
+        constexpr float kMinStep = 0.02f;
+        if (step < kMinStep) {
+            step = kMinStep;
+        }
+
+        g_currentFactor += step;
+
+        // Toleransi 0.98f agar transisi zoom-out tuntas 100% mulus
+        if (g_currentFactor >= 0.98f) {
             g_currentFactor = kNeutralFactor;
+            
+            // Set ke 1.0f dulu di frame terakhir sebelum unhook
+            camera_hook::SetOverride(kNeutralFactor);
+
             g_active.store(false, std::memory_order_relaxed);
             g_releasing.store(false, std::memory_order_relaxed);
             
