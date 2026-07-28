@@ -1,19 +1,18 @@
 #include "ZoomController/ZoomController.hpp"
+
 #include "CameraHook/CameraHook.hpp"
 #include "Core/Config.hpp"
-#include "Core/ModContext.hpp"
 
 #include <atomic>
-#include <chrono>
 #include <cmath>
 #include <algorithm>
 
 namespace zoom_controller {
 namespace {
 
-constexpr float kInitialZoomFactor = 0.30f; 
-constexpr float kMinZoomLimit      = 0.03f; 
-constexpr float kMaxZoomLimit      = 0.85f; 
+constexpr float kInitialZoomFactor = 0.30f; // Zoom awal saat tombol ditekan
+constexpr float kMinZoomLimit      = 0.03f; // Zoom maksimal (teleskopik dekat)
+constexpr float kMaxZoomLimit      = 0.85f; // Zoom minimal
 
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_releasing{false};
@@ -21,18 +20,10 @@ std::atomic<bool> g_releasing{false};
 std::atomic<float> g_targetFactor{kNeutralFactor};
 float g_currentFactor = kNeutralFactor;
 
-using Clock = std::chrono::steady_clock;
-Clock::time_point g_releaseStartTime;
-float g_releaseStartFactor = kNeutralFactor;
-float g_releaseDurationMs = 150.0f;
-
 float Clamp(float value) {
-    return std::clamp(value, kMinZoomLimit, kMaxZoomLimit);
-}
-
-float EaseOutCubic(float t) {
-    float f = 1.0f - t;
-    return 1.0f - (f * f * f);
+    if (value < kMinZoomLimit) return kMinZoomLimit;
+    if (value > kMaxZoomLimit) return kMaxZoomLimit;
+    return value;
 }
 
 } // namespace
@@ -54,14 +45,7 @@ void UpdateDrag(float delta) {
 }
 
 void EndZoom() {
-    if (!g_active.load(std::memory_order_relaxed)) return;
-
-    g_releaseStartFactor = g_currentFactor;
-    g_releaseStartTime = Clock::now();
-    
-    float animSpeedSetting = static_cast<float>(config::g_settings.zoomAnimSpeed);
-    g_releaseDurationMs = std::clamp(300.0f - (animSpeedSetting * 20.0f), 80.0f, 280.0f);
-
+    g_targetFactor.store(kNeutralFactor, std::memory_order_relaxed);
     g_releasing.store(true, std::memory_order_relaxed);
 }
 
@@ -70,32 +54,37 @@ void Tick() {
         return;
     }
 
+    float target = g_targetFactor.load(std::memory_order_relaxed);
     bool isReleasing = g_releasing.load(std::memory_order_relaxed);
 
+    // Ambil setting kecepatan animasi dari Mod Menu (1 - 10, default = 5)
+    float speedSetting = static_cast<float>(config::g_settings.zoomAnimSpeed);
+
+    // Pada setting default (5):
+    // - releaseSpeed = 5 * 0.08f = 0.40f
+    // - zoomInSpeed  = 5 * 0.05f = 0.25f
+    float releaseSpeed = std::clamp(speedSetting * 0.08f, 0.08f, 0.80f);
+    float zoomInSpeed  = std::clamp(speedSetting * 0.05f, 0.05f, 0.50f);
+
     if (isReleasing) {
-        auto now = Clock::now();
-        float elapsedMs = std::chrono::duration<float, std::milli>(now - g_releaseStartTime).count();
-        float progress = elapsedMs / g_releaseDurationMs;
+        // =====================================================================
+        // TRANSISI KEMBALI KE FOV PLAYER TANPA PATAH
+        // =====================================================================
+        g_currentFactor += (target - g_currentFactor) * releaseSpeed;
 
-        if (progress >= 1.0f) {
+        // Ambang batas 0.92f agar hook dilepas saat kamera masih punya momentum
+        if (g_currentFactor >= 0.92f) {
             g_currentFactor = kNeutralFactor;
-            camera_hook::SetOverride(kNeutralFactor);
-
             g_active.store(false, std::memory_order_relaxed);
             g_releasing.store(false, std::memory_order_relaxed);
             
             camera_hook::ClearOverride();
             return;
         }
-
-        float easedProgress = EaseOutCubic(progress);
-        g_currentFactor = g_releaseStartFactor + (kNeutralFactor - g_releaseStartFactor) * easedProgress;
     } else {
-        float animSpeedSetting = static_cast<float>(config::g_settings.zoomAnimSpeed);
-        float speedMultiplier = std::clamp(animSpeedSetting * 0.045f, 0.05f, 0.4f);
-        float target = g_targetFactor.load(std::memory_order_relaxed);
-        
-        g_currentFactor += (target - g_currentFactor) * speedMultiplier;
+        // Logika saat Zoom In (ditekan / di-drag)
+        float diff = target - g_currentFactor;
+        g_currentFactor += diff * zoomInSpeed;
     }
 
     camera_hook::SetOverride(g_currentFactor);
