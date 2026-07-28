@@ -41,7 +41,7 @@ static void onConfigChanged(std::string_view moduleId, std::string_view key, std
 }
 
 void RegisterModMenu() {
-    pl::modmenu::ModuleBuilder(kModuleId, "Zoom Settings")
+    (void)pl::modmenu::ModuleBuilder(kModuleId, "Zoom Settings")
         .description("Atur kecepatan zoom dan opsi tampilan")
         .defaultEnabled(true)
         .config("zoomAnimSpeed", "Kecepatan Zoom",
