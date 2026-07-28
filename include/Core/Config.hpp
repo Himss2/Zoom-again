@@ -11,6 +11,11 @@ struct Settings {
     int zoomAnimSpeed = 5;            // Kecepatan animasi (1 - 10)
     bool enableSpyglassSound = true;  // Toggle suara spyglass
     bool hideHandOnZoom = true;       // Toggle sembunyikan tangan
+    
+    // Gabungkan setting posisi & ukuran tombol ke sini
+    float posX = 60.0f;
+    float posY = 120.0f;
+    float scale = 1.0f;
 };
 
 extern Settings g_settings;
@@ -22,12 +27,11 @@ void UnregisterModMenu();
 
 } // namespace config
 
-// Schema metadata untuk Preloader Config Generator
 namespace pl::config {
 
 template <> struct Schema<::config::Settings> {
   static constexpr std::string_view title = "Zoom Settings";
-  static constexpr std::string_view description = "Pengaturan untuk mod Smooth Zoom";
+  static constexpr std::string_view description = "Pengaturan lengkap untuk Zoom Rewrite";
 
   static constexpr FieldSchema field(std::string_view name) {
     if (name == "version") {
@@ -41,6 +45,15 @@ template <> struct Schema<::config::Settings> {
     }
     if (name == "hideHandOnZoom") {
       return {"Hide Hand", "Sembunyikan tangan pemain saat zoom", std::nullopt, std::nullopt, false};
+    }
+    if (name == "posX") {
+      return {"Posisi X", "Posisi X tombol di layar", 0.0, 2500.0, false};
+    }
+    if (name == "posY") {
+      return {"Posisi Y", "Posisi Y tombol di layar", 0.0, 1500.0, false};
+    }
+    if (name == "scale") {
+      return {"Skala Tombol", "Ukuran tombol ZM", 0.5, 3.0, false};
     }
     return {};
   }
