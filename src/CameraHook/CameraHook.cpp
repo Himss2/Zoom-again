@@ -7,6 +7,7 @@
 #include <pl/memory/Hook.hpp>
 #include <pl/memory/Vtable.hpp>
 #include <atomic>
+#include <chrono>
 #include <cstring>
 
 namespace camera_hook {
@@ -15,7 +16,6 @@ namespace {
 constexpr const char* kTypeInfoCameraAPI  = "9CameraAPI";
 constexpr size_t      kTryGetFOVSlot      = 7;
 
-// RTTI valid di libminecraftpe.so adalah "7Options"
 constexpr const char* kTypeInfoOptions    = "7Options";
 constexpr const char* kMinecraftModule   = "libminecraftpe.so";
 
@@ -41,8 +41,19 @@ uint64_t PackFov(bool hasValue, float value) {
 }
 
 uint64_t DetourFOV(void* thisPtr) {
-    if (g_tickCallback) {
-        g_tickCallback();
+    // =========================================================================
+    // OPTIMASI: FRAME GUARD (Mencegah eksekusi g_tickCallback berulang per frame)
+    // =========================================================================
+    static auto lastTickTime = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    
+    // Batasi tick callback maksimal 1x setiap 8.000 mikrodetik (~125 FPS max rate)
+    auto elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(now - lastTickTime).count();
+    if (elapsedUs >= 8000) {
+        lastTickTime = now;
+        if (g_tickCallback) {
+            g_tickCallback();
+        }
     }
 
     if (!g_hasOverride.load(std::memory_order_relaxed)) {
@@ -53,7 +64,6 @@ uint64_t DetourFOV(void* thisPtr) {
 }
 
 bool DetourHideHand(void* thisPtr) {
-    // Sembunyikan tangan saat zoom aktif jika setting dinyalakan di Mod Menu
     if (zoom_controller::IsActive() && config::g_settings.hideHandOnZoom) {
         return true; 
     }
@@ -92,8 +102,7 @@ bool Install() {
     }
     g_origTryGetFOV = reinterpret_cast<TryGetFOVFn>(origCamOut);
 
-    // 2. Hook Options::getHideHand (Class "7Options")
-    // Kandidat slot diperluas mencakup offset VTable Minecraft 1.26.x (27, 28, 29, 26, 25, dst)
+    // 2. Hook Options::getHideHand
     constexpr size_t kHideHandSlots[] = {27, 28, 29, 26, 25, 30, 31, 32, 23, 22, 24};
     
     for (size_t slot : kHideHandSlots) {
