@@ -14,6 +14,7 @@
 // Core/ModContext.hpp for why.
 
 #include "Core/ModContext.hpp"
+#include "Core/Config.hpp"
 #include "CameraHook/CameraHook.hpp"
 #include "ZoomController/ZoomController.hpp"
 #include "TouchController/TouchController.hpp"
@@ -34,6 +35,9 @@ public:
         auto& log = core::Log();
         log.info("Core: load() start (official ModuleBuilder+Config pattern test)");
 
+        // 1. Load config file terlebih dahulu sesuai petunjuk checklist
+        config::Load();
+
         if (!camera_hook::Install()) {
             log.error("Core: CameraHook::Install() failed, aborting load()");
             return false;
@@ -51,6 +55,8 @@ public:
     }
 
     bool enable() {
+        // 2. Registrasi UI Mod Menu di dalam enable()
+        config::RegisterModMenu();
         return zoom_button::Install();
     }
 
