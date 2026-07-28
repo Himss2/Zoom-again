@@ -26,25 +26,26 @@ bool OnTouch(const pl::input::TouchEvent& ev) {
     switch (action) {
         case kActionDown:
         case kActionPointerDown:
-            // Tangkap hanya jika tombol "ZM" ditekan
+            // Hanya tangkap jika sentuhan berada di dalam area tombol ZM
             if (g_trackedPointerId == -1 && zoom_button::Contains(ev.x, ev.y)) {
                 g_trackedPointerId = ev.pointerId;
                 g_lastY = ev.y;
                 zoom_controller::BeginZoom();
-                return true; // Konsumsi DOWN agar MC tidak memukul/menghancurkan blok
+                return true; // Konsumsi event DOWN agar tidak memukul/menghancurkan blok di game
             }
-            return false; // Jari lain (kamera) diteruskan ke Minecraft
+            return false; // Jari lain (gerakan kamera/jalan) diteruskan penuh ke Minecraft
 
         case kActionMove:
             if (g_trackedPointerId != -1 && ev.pointerId == g_trackedPointerId) {
-                float deltaY = ev.y - g_lastY; // Geser ke atas = deltaY minus (zoom in)
+                float deltaY = ev.y - g_lastY; 
                 g_lastY = ev.y;
                 
-                // Sensitivitas drag disesuaikan agar transisi zoom halus
-                zoom_controller::UpdateDrag(deltaY * 0.0015f);
+                // Usap ke atas (deltaY negatif) -> menambah zoom (+factor)
+                // Usap ke bawah (deltaY positif) -> mengurangi zoom (-factor)
+                // Pengali 0.008f disesuaikan dengan rentang skala baru [1.0f - 6.0f]
+                zoom_controller::UpdateDrag(-deltaY * 0.008f);
             }
-            // CRITICAL FIX: Selalu return false pada MOVE agar Minecraft 
-            // tetap menerima input rotasi kamera dari jari kedua!
+            // CRITICAL: Return false agar pergerakan kamera dari jari kedua tetap berjalan lancar
             return false;
 
         case kActionUp:
@@ -53,7 +54,7 @@ bool OnTouch(const pl::input::TouchEvent& ev) {
             if (ev.pointerId == g_trackedPointerId) {
                 g_trackedPointerId = -1;
                 zoom_controller::EndZoom();
-                return true; // Konsumsi UP tombol zoom
+                return true; // Konsumsi event UP dari tombol zoom
             }
             return false;
 
