@@ -7,11 +7,10 @@
 namespace config {
 
 struct Settings {
-    int version = 1;                  // Schema version
+    int version = 1;                  // Wajib untuk TypedConfig
     int zoomAnimSpeed = 5;            // Kecepatan animasi (1 - 10)
     bool enableSpyglassSound = true;  // Toggle suara spyglass
     bool hideHandOnZoom = true;       // Toggle sembunyikan tangan
-    bool showZoomButton = true;       // Toggle tombol zoom di HUD
 };
 
 extern Settings g_settings;
@@ -42,9 +41,6 @@ template <> struct Schema<::config::Settings> {
     }
     if (name == "hideHandOnZoom") {
       return {"Hide Hand", "Sembunyikan tangan pemain saat zoom", std::nullopt, std::nullopt, false};
-    }
-    if (name == "showZoomButton") {
-      return {"Show Button", "Tampilkan tombol zoom di HUD", std::nullopt, std::nullopt, false};
     }
     return {};
   }
