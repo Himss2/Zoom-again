@@ -2,6 +2,7 @@
 #include "Core/ModContext.hpp"
 
 #include <cstdlib>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -39,8 +40,9 @@ static void onConfigChanged(std::string_view moduleId, std::string_view key, std
     if (key == "zoomAnimSpeed") {
         g_settings.zoomAnimSpeed = std::atoi(safeValue.c_str());
     } else if (key == "hideHandOnZoom") {
-        // Toggle biasanya mengirimkan "true"/"false" atau "1"/"0"
         g_settings.hideHandOnZoom = (safeValue == "1" || safeValue == "true");
+    } else if (key == "opacity") {
+        g_settings.opacity = std::clamp(std::atoi(safeValue.c_str()), 0, 100);
     } else if (key == "pos_x") {
         g_settings.posX = std::strtof(safeValue.c_str(), nullptr);
     } else if (key == "pos_y") {
@@ -57,6 +59,7 @@ void RegisterModMenu() {
 
     std::string strSpeed    = std::to_string(g_settings.zoomAnimSpeed);
     std::string strHideHand = g_settings.hideHandOnZoom ? "true" : "false";
+    std::string strOpacity  = std::to_string(g_settings.opacity);
     std::string strX        = std::to_string(g_settings.posX);
     std::string strY        = std::to_string(g_settings.posY);
     std::string strScale    = std::to_string(g_settings.scale);
@@ -68,6 +71,8 @@ void RegisterModMenu() {
                 pl::modmenu::ConfigType::SliderInt, strSpeed, "1", "10")
         .config("hideHandOnZoom", "Sembunyikan Tangan",
                 pl::modmenu::ConfigType::Toggle, strHideHand)
+        .config("opacity", "Transparansi Tombol (%)",
+                pl::modmenu::ConfigType::SliderInt, strOpacity, "0", "100")
         .config("pos_x", "Posisi X Tombol", 
                 pl::modmenu::ConfigType::SliderFloat, strX, "0.0", "2500.0")
         .config("pos_y", "Posisi Y Tombol", 
