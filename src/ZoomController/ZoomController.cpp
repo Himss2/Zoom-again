@@ -1,6 +1,6 @@
 #include "ZoomController/ZoomController.hpp"
-
 #include "CameraHook/CameraHook.hpp"
+#include "Core/Config.hpp" // Terhubung langsung ke Mod Menu Config
 
 #include <atomic>
 #include <cmath>
@@ -9,15 +9,9 @@ namespace zoom_controller {
 namespace {
 
 constexpr float kInitialZoomFactor = 0.30f; // Zoom awal saat tombol ditekan
-constexpr float kMinZoomLimit      = 0.03f; // Zoom maksimal (teleskopik dekat)
+constexpr float kMinZoomLimit      = 0.03f; // Zoom maksimal (terdekat)
 constexpr float kMaxZoomLimit      = 0.85f; // Zoom minimal
-
-// =============================================================================
-// KONFIGURASI PENGATURAN MOD (Bisa diubah nilainya atau dihubungkan ke UI)
-// =============================================================================
-int g_zoomAnimSpeed        = 5;    // Slider Rentang 1 (Lambat) - 10 (Cepat)
-bool g_enableSpyglassSound = true; // Toggle Suara Spyglass
-bool g_hideHandOnZoom      = true; // Toggle Sembunyikan Tangan saat Zoom
+constexpr float kNeutralFactor     = 1.0f;  // FOV Normal bawaan game
 
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_releasing{false};
@@ -32,9 +26,9 @@ float Clamp(float value) {
 }
 
 void PlaySpyglassSound(bool isStart) {
-    if (!g_enableSpyglassSound) return;
+    // Membaca pengaturan dari Mod Menu
+    if (!config::g_settings.enableSpyglassSound) return;
     
-    // Logika pemutaran suara spyglass (mengikuti API audio Preloader/Game)
     if (isStart) {
         // Play sound "item.spyglass.use"
     } else {
@@ -43,9 +37,10 @@ void PlaySpyglassSound(bool isStart) {
 }
 
 void UpdateHandVisibility(bool hide) {
-    if (!g_hideHandOnZoom) return;
+    // Membaca pengaturan dari Mod Menu
+    if (!config::g_settings.hideHandOnZoom) return;
 
-    // Logika menyembunyikan tangan (first-person hand) saat zoom aktif
+    // Logika menyembunyikan tangan saat zoom aktif
 }
 
 } // namespace
@@ -82,32 +77,32 @@ void Tick() {
     }
 
     // =========================================================================
-    // HITUNG KECEPATAN ANIMASI BERDASARKAN SLIDER (Rentang 1 - 10)
-    // 1  -> 0.04f (Mulus & Lambat)
-    // 5  -> 0.20f (Kecepatan Sedang/Ideal)
-    // 10 -> 0.40f (Cepat/Instan)
+    // HITUNG KECEPATAN ANIMASI BERDASARKAN SLIDER MOD MENU (Rentang 1 - 10)
+    // 1  -> 0.05f (Sangat Mulus & Halus)
+    // 5  -> 0.20f (Ideal)
+    // 10 -> 0.45f (Responsif & Cepat)
     // =========================================================================
-    float speedMultiplier = static_cast<float>(g_zoomAnimSpeed) * 0.04f;
+    float speedMultiplier = static_cast<float>(config::g_settings.zoomAnimSpeed) * 0.045f;
 
     float target = g_targetFactor.load(std::memory_order_relaxed);
     bool isReleasing = g_releasing.load(std::memory_order_relaxed);
 
     if (isReleasing) {
-        // Zoom out menggunakan kecepatan lerp dari Slider
+        // Smooth Lerp kembali ke 1.0f
         g_currentFactor += (target - g_currentFactor) * speedMultiplier;
 
-        // Ambang batas 0.92f agar hook dilepas saat kamera masih punya momentum
-        if (g_currentFactor >= 0.92f) {
+        // DIUBAH: Menggunakan toleransi 0.995f agar transisi zoom-out tuntas 100% mulus tanpa kaget/patah
+        if (g_currentFactor >= 0.995f) {
             g_currentFactor = kNeutralFactor;
             g_active.store(false, std::memory_order_relaxed);
             g_releasing.store(false, std::memory_order_relaxed);
             
-            UpdateHandVisibility(false); // Munculkan tangan kembali saat zoom selesai
+            UpdateHandVisibility(false); // Munculkan tangan kembali
             camera_hook::ClearOverride();
             return;
         }
     } else {
-        // Zoom in menggunakan kecepatan lerp dari Slider
+        // Smooth Lerp saat Zoom In
         float diff = target - g_currentFactor;
         g_currentFactor += diff * speedMultiplier;
     }
