@@ -12,7 +12,6 @@ namespace config {
 Settings g_settings;
 static pl::config::ConfigFile<Settings> g_configFile;
 
-// Gunakan ID utama mod kamu agar opsi pengaturan menyatu di tombol Gear card utama
 constexpr const char *kModuleId = "zoom_rewrite";
 
 void Load() {
@@ -36,14 +35,24 @@ static void onConfigChanged(std::string_view moduleId, std::string_view key, std
         g_settings.enableSpyglassSound = (safeValue == "1" || safeValue == "true");
     } else if (key == "hideHandOnZoom") {
         g_settings.hideHandOnZoom = (safeValue == "1" || safeValue == "true");
+    } else if (key == "pos_x") {
+        g_settings.posX = std::strtof(safeValue.c_str(), nullptr);
+    } else if (key == "pos_y") {
+        g_settings.posY = std::strtof(safeValue.c_str(), nullptr);
+    } else if (key == "scale") {
+        g_settings.scale = std::strtof(safeValue.c_str(), nullptr);
     }
 
     Save();
 }
 
 void RegisterModMenu() {
+    std::string strX = std::to_string(g_settings.posX);
+    std::string strY = std::to_string(g_settings.posY);
+    std::string strScale = std::to_string(g_settings.scale);
+
     (void)pl::modmenu::ModuleBuilder(kModuleId, "Zoom Rewrite")
-        .description("Flarial-style smooth zoom mod")
+        .description("Flarial-style smooth zoom & overlay settings")
         .defaultEnabled(true)
         .config("zoomAnimSpeed", "Kecepatan Zoom",
                 pl::modmenu::ConfigType::SliderInt, "5", "1", "10")
@@ -51,6 +60,12 @@ void RegisterModMenu() {
                 pl::modmenu::ConfigType::Radio, "1", "Matikan,Aktif")
         .config("hideHandOnZoom", "Sembunyikan Tangan",
                 pl::modmenu::ConfigType::Radio, "1", "Matikan,Aktif")
+        .config("pos_x", "Posisi X Tombol", 
+                pl::modmenu::ConfigType::SliderFloat, strX, "0.0", "2500.0")
+        .config("pos_y", "Posisi Y Tombol", 
+                pl::modmenu::ConfigType::SliderFloat, strY, "0.0", "1500.0")
+        .config("scale", "Ukuran Tombol", 
+                pl::modmenu::ConfigType::SliderFloat, strScale, "0.5", "3.0")
         .onConfigChanged(onConfigChanged)
         .registerModule();
 }
