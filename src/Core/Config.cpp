@@ -1,9 +1,28 @@
 #include "Core/Config.hpp"
 #include "Core/ModContext.hpp"
 
-#include <pl/runtime/ModMenuBridge.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
+
+// Deteksi otomatis lokasi header Mod Menu di preloader-android
+#if __has_include(<pl/ModMenu.hpp>)
+    #include <pl/ModMenu.hpp>
+    #define HAS_MODMENU 1
+#elif __has_include(<pl/ModMenuBridge.hpp>)
+    #include <pl/ModMenuBridge.hpp>
+    #define HAS_MODMENU 1
+#elif __has_include(<pl/runtime/ModMenu.hpp>)
+    #include <pl/runtime/ModMenu.hpp>
+    #define HAS_MODMENU 1
+#elif __has_include(<pl/runtime/ModMenuBridge.hpp>)
+    #include <pl/runtime/ModMenuBridge.hpp>
+    #define HAS_MODMENU 1
+#elif __has_include(<pl/modmenu/ModMenu.hpp>)
+    #include <pl/modmenu/ModMenu.hpp>
+    #define HAS_MODMENU 1
+#else
+    #define HAS_MODMENU 0
+#endif
 
 namespace config {
 
@@ -44,6 +63,7 @@ void Save() {
 }
 
 void RegisterModMenu() {
+#if HAS_MODMENU
     using namespace pl::modmenu;
 
     auto builder = ModuleBuilder("SmoothZoom", "Smooth Zoom with Drag Controls");
@@ -60,6 +80,9 @@ void RegisterModMenu() {
            });
 
     RegisterModule(builder.build());
+#else
+    core::Log().info("Config: ModMenu header tidak ditemukan pada build ini, melewati registrasi ModMenu GUI.");
+#endif
 }
 
 } // namespace config
