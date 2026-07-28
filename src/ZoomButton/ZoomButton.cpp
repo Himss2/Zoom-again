@@ -3,8 +3,9 @@
 #include "Core/ModContext.hpp"
 
 #include <pl/ModMenu.hpp>
-#include <array>
 #include <algorithm>
+#include <cmath>
+#include <vector>
 
 namespace zoom_button {
 
@@ -14,12 +15,59 @@ constexpr const char* kModuleId = "zoom_rewrite";
 
 constexpr float kBaseW = 68.0f;
 constexpr float kBaseH = 68.0f;
+constexpr float kBaseRadius = 14.0f;          // sudut membulat, ala BedrockTools
+constexpr float kBaseOutlineThickness = 2.0f;
+constexpr int   kCornerSteps = 8;             // naikkan ke 12-16 kalau masih kelihatan bertangga
 
 // Helper untuk menghasilkan warna ARGB sesuai tingkat transparansi
 inline uint32_t MakeColor(uint8_t r, uint8_t g, uint8_t b, float alphaMultiplier, int opacityPercent) {
     float userAlpha = static_cast<float>(opacityPercent) / 100.0f;
     uint32_t a = static_cast<uint32_t>(std::clamp(alphaMultiplier * userAlpha * 255.0f, 0.0f, 255.0f));
     return (a << 24) | (static_cast<uint32_t>(r) << 16) | (static_cast<uint32_t>(g) << 8) | static_cast<uint32_t>(b);
+}
+
+// Menambahkan satu rounded-rect (solid fill) ke buffer command.
+// Sudut didekati dengan beberapa strip horizontal tipis dari persamaan lingkaran,
+// bukan notch 1-langkah - hasilnya jauh lebih halus.
+void AddRoundedRect(std::vector<pl::modmenu::DrawCommand>& out,
+                    float x, float y, float w, float h,
+                    float radius, uint32_t color) {
+    radius = std::min({radius, w * 0.5f, h * 0.5f});
+    if (radius < 0.5f) {
+        // Terlalu kecil untuk radius berarti, cukup gambar rect biasa
+        pl::modmenu::DrawCommand cmd{};
+        cmd.type = pl::modmenu::DrawCommandType::RectFilled;
+        cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h;
+        cmd.color = color;
+        out.push_back(cmd);
+        return;
+    }
+
+    auto rect = [&](float rx, float ry, float rw, float rh) {
+        if (rw <= 0.0f || rh <= 0.0f) return;
+        pl::modmenu::DrawCommand cmd{};
+        cmd.type = pl::modmenu::DrawCommandType::RectFilled;
+        cmd.x = rx; cmd.y = ry; cmd.w = rw; cmd.h = rh;
+        cmd.color = color;
+        out.push_back(cmd);
+    };
+
+    // Badan utama bentuk "plus" (tanpa celah di tengah)
+    rect(x + radius, y, w - radius * 2.0f, h);
+    rect(x, y + radius, radius, h - radius * 2.0f);
+    rect(x + w - radius, y + radius, radius, h - radius * 2.0f);
+
+    // 4 sudut, tiap sudut didekati N strip horizontal tipis
+    for (int i = 0; i < kCornerSteps; ++i) {
+        float dy = radius * (static_cast<float>(i) / kCornerSteps);
+        float dx = std::sqrt(std::max(0.0f, radius * radius - dy * dy));
+        float stripH = radius / kCornerSteps + 0.5f; // sedikit overlap, hindari celah subpixel
+
+        rect(x + radius - dx, y + radius - dy - stripH, dx, stripH);              // kiri-atas
+        rect(x + w - radius, y + radius - dy - stripH, dx, stripH);               // kanan-atas
+        rect(x + radius - dx, y + h - radius + dy, dx, stripH);                   // kiri-bawah
+        rect(x + w - radius, y + h - radius + dy, dx, stripH);                    // kanan-bawah
+    }
 }
 
 } // namespace
@@ -52,98 +100,55 @@ void Draw(bool isActive) {
     float s = config::g_settings.scale;
     float w = kBaseW * s;
     float h = kBaseH * s;
+    float radius = kBaseRadius * s;
+    float outlineThickness = kBaseOutlineThickness * s;
 
     int userOpacity = config::g_settings.opacity;
 
-    // Ukuran Potongan Piksel Sudut (Pixel-Art Notch Step)
-    // Disesuaikan dengan skala agar tetap tampak proporsional seperti piksel Minecraft
-    float pStep  = std::max(2.0f, 2.5f * s); // Ukuran notch luar
-    float b      = 1.5f * s;                 // Ketebalan border
-    float ipStep = std::max(1.0f, 1.5f * s); // Ukuran notch dalam
+    // Warna: outline putih tipis + fill hitam semi-transparan + teks putih
+    // (arah styling ala BedrockTools: background/outline/text opacity independen)
+    uint32_t colOutline = MakeColor(0xFF, 0xFF, 0xFF, isActive ? 0.55f : 0.30f, userOpacity);
+    uint32_t colBg      = MakeColor(0x00, 0x00, 0x00, isActive ? 0.55f : 0.35f, userOpacity);
+    uint32_t colText    = MakeColor(0xFF, 0xFF, 0xFF, isActive ? 1.00f : 0.85f, userOpacity);
+    uint32_t colShadow  = MakeColor(0x00, 0x00, 0x00, isActive ? 0.60f : 0.40f, userOpacity);
 
-    // Warna Touch HUD Native Minecraft
-    uint32_t colBorder = MakeColor(0x6E, 0x6E, 0x6E, isActive ? 0.65f : 0.40f, userOpacity); // Garis Tepi
-    uint32_t colFill   = MakeColor(0x1C, 0x1C, 0x1C, isActive ? 0.70f : 0.35f, userOpacity); // Latar Belakang
-    uint32_t colText   = MakeColor(0xE0, 0xE0, 0xE0, isActive ? 1.00f : 0.75f, userOpacity); // Teks Utama
-    uint32_t colShadow = MakeColor(0x3F, 0x3F, 0x3F, isActive ? 0.80f : 0.50f, userOpacity); // Bayangan Teks MC
+    std::vector<pl::modmenu::DrawCommand> commands;
+    commands.reserve(64);
 
-    std::array<pl::modmenu::DrawCommand, 8> commands{};
+    // Layer outline (rect lebih besar di belakang)
+    AddRoundedRect(commands, x, y, w, h, radius, colOutline);
+    // Layer fill (inset sebesar outlineThickness)
+    AddRoundedRect(commands,
+                  x + outlineThickness, y + outlineThickness,
+                  w - outlineThickness * 2.0f, h - outlineThickness * 2.0f,
+                  radius - outlineThickness, colBg);
 
-    // =========================================================================
-    // 1. PIXELATED OUTER BORDER (Dipotong Tangga Piksel di 4 Sudut)
-    // =========================================================================
-    // Strip Atas
-    commands[0].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[0].x = x + pStep; commands[0].y = y;
-    commands[0].w = w - (pStep * 2.0f); commands[0].h = pStep;
-    commands[0].color = colBorder;
-
-    // Strip Tengah Utama
-    commands[1].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[1].x = x; commands[1].y = y + pStep;
-    commands[1].w = w; commands[1].h = h - (pStep * 2.0f);
-    commands[1].color = colBorder;
-
-    // Strip Bawah
-    commands[2].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[2].x = x + pStep; commands[2].y = y + h - pStep;
-    commands[2].w = w - (pStep * 2.0f); commands[2].h = pStep;
-    commands[2].color = colBorder;
-
-    // =========================================================================
-    // 2. PIXELATED INNER FILL (Isian Dalam Bertangga Piksel)
-    // =========================================================================
-    float ix = x + b;
-    float iy = y + b;
-    float iw = w - (b * 2.0f);
-    float ih = h - (b * 2.0f);
-
-    // Strip Dalam Atas
-    commands[3].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[3].x = ix + ipStep; commands[3].y = iy;
-    commands[3].w = iw - (ipStep * 2.0f); commands[3].h = ipStep;
-    commands[3].color = colFill;
-
-    // Strip Dalam Tengah
-    commands[4].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[4].x = ix; commands[4].y = iy + ipStep;
-    commands[4].w = iw; commands[4].h = ih - (ipStep * 2.0f);
-    commands[4].color = colFill;
-
-    // Strip Dalam Bawah
-    commands[5].type = pl::modmenu::DrawCommandType::RectFilled;
-    commands[5].x = ix + ipStep; commands[5].y = iy + ih - ipStep;
-    commands[5].w = iw - (ipStep * 2.0f); commands[5].h = ipStep;
-    commands[5].color = colFill;
-
-    // =========================================================================
-    // 3. TEKS "ZM" TEPAT DI TENGAH DENGAN DROP SHADOW
-    // =========================================================================
+    // Teks "ZM" di tengah, dengan drop shadow tipis
     float fontSize = 15.0f * s;
     float textCenterX = x + (w * 0.5f);
     float textCenterY = y + (h * 0.5f);
-
     float halfTextWidth  = fontSize * 0.55f;
     float halfTextHeight = fontSize * 0.40f;
-
     float textX = textCenterX - halfTextWidth;
     float textY = textCenterY - halfTextHeight;
 
-    // Bayangan Teks MC (Offset +1px)
-    commands[6].type = pl::modmenu::DrawCommandType::Text;
-    commands[6].x = textX + (1.2f * s);
-    commands[6].y = textY + (1.2f * s);
-    commands[6].text = "ZM";
-    commands[6].color = colShadow;
-    commands[6].size = fontSize;
+    pl::modmenu::DrawCommand shadow{};
+    shadow.type = pl::modmenu::DrawCommandType::Text;
+    shadow.x = textX + (1.0f * s);
+    shadow.y = textY + (1.0f * s);
+    shadow.text = "ZM";
+    shadow.color = colShadow;
+    shadow.size = fontSize;
+    commands.push_back(shadow);
 
-    // Teks Utama "ZM"
-    commands[7].type = pl::modmenu::DrawCommandType::Text;
-    commands[7].x = textX;
-    commands[7].y = textY;
-    commands[7].text = "ZM";
-    commands[7].color = colText;
-    commands[7].size = fontSize;
+    pl::modmenu::DrawCommand text{};
+    text.type = pl::modmenu::DrawCommandType::Text;
+    text.x = textX;
+    text.y = textY;
+    text.text = "ZM";
+    text.color = colText;
+    text.size = fontSize;
+    commands.push_back(text);
 
     pl::modmenu::submitDrawCommands(kModuleId, commands);
 }
