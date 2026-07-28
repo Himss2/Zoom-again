@@ -16,8 +16,6 @@ constexpr const char* kTypeInfoCameraAPI = "9CameraAPI";
 constexpr size_t      kTryGetFOVSlot     = 7;
 
 constexpr const char* kTypeInfoOptions   = "7Options";
-constexpr size_t      kGetHideHandSlot   = 23;
-
 constexpr const char* kMinecraftModule   = "libminecraftpe.so";
 
 using TryGetFOVFn   = uint64_t (*)(void*);
@@ -54,6 +52,7 @@ uint64_t DetourFOV(void* thisPtr) {
 }
 
 bool DetourHideHand(void* thisPtr) {
+    // Sembunyikan tangan secara paksa jika Zoom sedang aktif dan setting Hide Hand dinyalakan
     if (zoom_controller::IsActive() && config::g_settings.hideHandOnZoom) {
         return true; 
     }
@@ -92,24 +91,30 @@ bool Install() {
     }
     g_origTryGetFOV = reinterpret_cast<TryGetFOVFn>(origCamOut);
 
-    // 2. Hook Options::getHideHand
-    g_targetHideHand = reinterpret_cast<void*>(
-        pl::memory::resolveVtableFunction(kTypeInfoOptions, kGetHideHandSlot, kMinecraftModule));
+    // 2. Hook Options::getHideHand dengan pencarian slot VTable otomatis (23 -> 22 -> 24)
+    constexpr size_t kHideHandCandidateSlots[] = {23, 22, 24};
+    for (size_t slot : kHideHandCandidateSlots) {
+        g_targetHideHand = reinterpret_cast<void*>(
+            pl::memory::resolveVtableFunction(kTypeInfoOptions, slot, kMinecraftModule));
 
-    if (g_targetHideHand) {
-        void* origHideOut = nullptr;
-        int resHide = pl::memory::hook(
-            g_targetHideHand,
-            reinterpret_cast<void*>(DetourHideHand),
-            &origHideOut,
-            pl::memory::HookPriority::Normal);
+        if (g_targetHideHand) {
+            void* origHideOut = nullptr;
+            int resHide = pl::memory::hook(
+                g_targetHideHand,
+                reinterpret_cast<void*>(DetourHideHand),
+                &origHideOut,
+                pl::memory::HookPriority::Normal);
 
-        if (resHide == 0) {
-            g_origGetHideHand = reinterpret_cast<GetHideHandFn>(origHideOut);
-            log.info("CameraHook: installed Options::getHideHand hook");
-        } else {
-            log.warn("CameraHook: failed to hook Options::getHideHand (code={})", resHide);
+            if (resHide == 0) {
+                g_origGetHideHand = reinterpret_cast<GetHideHandFn>(origHideOut);
+                log.info("CameraHook: successfully installed Options::getHideHand hook at vtable slot {}", slot);
+                break;
+            }
         }
+    }
+
+    if (!g_origGetHideHand) {
+        log.warn("CameraHook: could not resolve or hook Options::getHideHand on candidate slots");
     }
 
     return true;
