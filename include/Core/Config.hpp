@@ -3,7 +3,8 @@
 namespace config {
 
 struct Settings {
-    int zoomAnimSpeed = 5;           // Range 1 (Lambat) - 10 (Cepat)
+    int version = 1;                  // Wajib untuk TypedConfig concept Preloader SDK
+    int zoomAnimSpeed = 5;            // Slider Kecepatan Animasi (1 - 10)
     bool enableSpyglassSound = true;  // Toggle Suara Spyglass
     bool hideHandOnZoom = true;       // Toggle Sembunyikan Tangan saat Zoom
 };
