@@ -10,6 +10,7 @@ struct Settings {
     int version = 1;
     int zoomAnimSpeed = 5;
     bool hideHandOnZoom = true;
+    int opacity = 80; // Default 80% transparansi
     
     float posX = 60.0f;
     float posY = 120.0f;
@@ -40,6 +41,9 @@ template <> struct Schema<::config::Settings> {
     }
     if (name == "hideHandOnZoom") {
       return {"Hide Hand", "Sembunyikan tangan pemain saat zoom", std::nullopt, std::nullopt, false};
+    }
+    if (name == "opacity") {
+      return {"Transparansi", "Tingkat transparansi tombol (0-100%)", 0.0, 100.0, false};
     }
     if (name == "posX") {
       return {"Posisi X", "Posisi X tombol di layar", 0.0, 2500.0, false};
