@@ -11,12 +11,9 @@
 namespace zoom_controller {
 namespace {
 
-// Skala Factor FOV:
-// 1.0f = FOV Normal Player (Maksimum Zoom Out)
-// > 1.0f = Zoom In (2.5f = 2.5x zoom, 6.0f = 6x zoom)
-constexpr float kNeutralFactor     = 1.0f;  
-constexpr float kInitialZoomFactor = 2.5f;  // Zoom awal saat ditekan
-constexpr float kMinZoomInFactor   = 1.0f;  // Batas Maksimum Zoom Out (Normal FOV)
+// Note: kNeutralFactor (1.0f) sudah didefinisikan di ZoomController.hpp
+constexpr float kInitialZoomFactor = 2.5f;  // Zoom awal saat tombol ZM ditekan
+constexpr float kMinZoomInFactor   = 1.0f;  // Batas Zoom Out (Pas di Normal FOV)
 constexpr float kMaxZoomInFactor   = 6.0f;  // Batas Maksimum Zoom In (6x)
 
 std::atomic<bool> g_active{false};
@@ -34,6 +31,7 @@ float Clamp(float value) {
     return std::clamp(value, kMinZoomInFactor, kMaxZoomInFactor);
 }
 
+// Kurva animasi Ease-Out Cubic untuk transisi mulus
 float EaseOutCubic(float t) {
     float f = 1.0f - t;
     return 1.0f - (f * f * f);
@@ -43,7 +41,7 @@ float EaseOutCubic(float t) {
 
 void BeginZoom() {
     g_targetFactor.store(kInitialZoomFactor, std::memory_order_relaxed);
-    g_currentFactor = kInitialZoomFactor; // Langsung set agar tidak ada lompatan awal
+    g_currentFactor = kInitialZoomFactor; // Langsung set agar tidak ada lompatan awal dari 1.0
     g_releasing.store(false, std::memory_order_relaxed);
     g_active.store(true, std::memory_order_relaxed);
 }
@@ -64,9 +62,9 @@ void EndZoom() {
     g_releaseStartFactor = g_currentFactor;
     g_releaseStartTime = Clock::now();
     
+    // Kalkulasi durasi animasi rilis berdasarkan setting zoomAnimSpeed di Mod Menu (1-10)
     float animSpeedSetting = static_cast<float>(config::g_settings.zoomAnimSpeed);
-    // Durasi animasi rilis disesuaikan dengan setting kecepatan (ms)
-    g_releaseDurationMs = std::clamp(300.0f - (animSpeedSetting * 20.0f), 100.0f, 280.0f);
+    g_releaseDurationMs = std::clamp(320.0f - (animSpeedSetting * 22.0f), 100.0f, 300.0f);
 
     g_releasing.store(true, std::memory_order_relaxed);
 }
@@ -83,6 +81,7 @@ void Tick() {
         float elapsedMs = std::chrono::duration<float, std::milli>(now - g_releaseStartTime).count();
         float progress = elapsedMs / g_releaseDurationMs;
 
+        // Jika animasi selesai, kembalikan kontrol penuh ke Minecraft
         if (progress >= 1.0f) {
             g_currentFactor = kNeutralFactor;
             camera_hook::SetOverride(kNeutralFactor);
@@ -94,10 +93,11 @@ void Tick() {
             return;
         }
 
+        // Terapkan kurva Ease-Out dari nilai zoom terakhir menuju 1.0f
         float easedProgress = EaseOutCubic(progress);
         g_currentFactor = g_releaseStartFactor + (kNeutralFactor - g_releaseStartFactor) * easedProgress;
     } else {
-        // Transisi halus saat jari sedang mengusap (drag)
+        // Smoothing halus saat jari sedang mengusap/drag naik-turun
         float animSpeedSetting = static_cast<float>(config::g_settings.zoomAnimSpeed);
         float lerpSpeed = std::clamp(animSpeedSetting * 0.05f, 0.1f, 0.4f);
         float target = g_targetFactor.load(std::memory_order_relaxed);
