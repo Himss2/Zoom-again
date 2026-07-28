@@ -13,13 +13,17 @@ namespace {
 
 constexpr const char* kModuleId = "zoom_rewrite";
 
-constexpr float kBaseW = 68.0f;
-constexpr float kBaseH = 68.0f;
-constexpr float kBaseRadius = 14.0f;          // sudut membulat, ala BedrockTools
+constexpr float kBaseW = 88.0f;              // sepadan ukuran tombol native lain
+constexpr float kBaseH = 88.0f;
+constexpr float kBaseRadius = 16.0f;
 constexpr float kBaseOutlineThickness = 2.0f;
-constexpr int   kCornerSteps = 8;             // naikkan ke 12-16 kalau masih kelihatan bertangga
+constexpr int   kCornerSteps = 4;            // cukup halus, jauh lebih murah dari 8
 
-// Helper untuk menghasilkan warna ARGB sesuai tingkat transparansi
+// Offset teks "ZM" dari titik tengah tombol - lihat komentar di Draw()
+// untuk cara tuning kalau posisinya masih meleset di device lain.
+constexpr float kTextOffsetXFactor = 0.62f; // makin besar -> makin ke kiri
+constexpr float kTextOffsetYFactor = 0.15f; // makin KECIL -> makin ke bawah
+
 inline uint32_t MakeColor(uint8_t r, uint8_t g, uint8_t b, float alphaMultiplier, int opacityPercent) {
     float userAlpha = static_cast<float>(opacityPercent) / 100.0f;
     uint32_t a = static_cast<uint32_t>(std::clamp(alphaMultiplier * userAlpha * 255.0f, 0.0f, 255.0f));
@@ -27,14 +31,13 @@ inline uint32_t MakeColor(uint8_t r, uint8_t g, uint8_t b, float alphaMultiplier
 }
 
 // Menambahkan satu rounded-rect (solid fill) ke buffer command.
-// Sudut didekati dengan beberapa strip horizontal tipis dari persamaan lingkaran,
-// bukan notch 1-langkah - hasilnya jauh lebih halus.
+// Sudut didekati dengan beberapa strip horizontal tipis dari persamaan
+// lingkaran, bukan notch 1-langkah - hasilnya jauh lebih halus.
 void AddRoundedRect(std::vector<pl::modmenu::DrawCommand>& out,
                     float x, float y, float w, float h,
                     float radius, uint32_t color) {
     radius = std::min({radius, w * 0.5f, h * 0.5f});
     if (radius < 0.5f) {
-        // Terlalu kecil untuk radius berarti, cukup gambar rect biasa
         pl::modmenu::DrawCommand cmd{};
         cmd.type = pl::modmenu::DrawCommandType::RectFilled;
         cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h;
@@ -102,18 +105,18 @@ void Draw(bool isActive) {
     float h = kBaseH * s;
     float radius = kBaseRadius * s;
     float outlineThickness = kBaseOutlineThickness * s;
-
     int userOpacity = config::g_settings.opacity;
 
-    // Warna: outline putih tipis + fill hitam semi-transparan + teks putih
-    // (arah styling ala BedrockTools: background/outline/text opacity independen)
-    uint32_t colOutline = MakeColor(0xFF, 0xFF, 0xFF, isActive ? 0.55f : 0.30f, userOpacity);
+    // Outline tipis, hampir menyatu dengan fill - bukan garis putih tajam
+    uint32_t colOutline = MakeColor(0xFF, 0xFF, 0xFF, isActive ? 0.35f : 0.18f, userOpacity);
     uint32_t colBg      = MakeColor(0x00, 0x00, 0x00, isActive ? 0.55f : 0.35f, userOpacity);
     uint32_t colText    = MakeColor(0xFF, 0xFF, 0xFF, isActive ? 1.00f : 0.85f, userOpacity);
     uint32_t colShadow  = MakeColor(0x00, 0x00, 0x00, isActive ? 0.60f : 0.40f, userOpacity);
 
-    std::vector<pl::modmenu::DrawCommand> commands;
-    commands.reserve(64);
+    // static: buffer dipakai ulang tiap frame (cuma di-clear()), bukan
+    // std::vector baru yang dialokasikan tiap kali Draw() dipanggil.
+    static std::vector<pl::modmenu::DrawCommand> commands;
+    commands.clear();
 
     // Layer outline (rect lebih besar di belakang)
     AddRoundedRect(commands, x, y, w, h, radius, colOutline);
@@ -123,19 +126,17 @@ void Draw(bool isActive) {
                   w - outlineThickness * 2.0f, h - outlineThickness * 2.0f,
                   radius - outlineThickness, colBg);
 
-    // Teks "ZM" di tengah, dengan drop shadow tipis
-    float fontSize = 15.0f * s;
-    float textCenterX = x + (w * 0.5f);
-    float textCenterY = y + (h * 0.5f);
-    float halfTextWidth  = fontSize * 0.55f;
-    float halfTextHeight = fontSize * 0.40f;
-    float textX = textCenterX - halfTextWidth;
-    float textY = textCenterY - halfTextHeight;
+    // Teks "ZM" - posisi dihitung dari tengah tombol lalu dikoreksi pakai
+    // kTextOffsetXFactor/kTextOffsetYFactor di atas (tuning manual karena
+    // DrawCommand tidak punya alignment/anchor bawaan yang kita ketahui).
+    float fontSize = 16.0f * s;
+    float textX = x + w * 0.5f - fontSize * kTextOffsetXFactor;
+    float textY = y + h * 0.5f - fontSize * kTextOffsetYFactor;
 
     pl::modmenu::DrawCommand shadow{};
     shadow.type = pl::modmenu::DrawCommandType::Text;
-    shadow.x = textX + (1.0f * s);
-    shadow.y = textY + (1.0f * s);
+    shadow.x = textX + 1.0f * s;
+    shadow.y = textY + 1.0f * s;
     shadow.text = "ZM";
     shadow.color = colShadow;
     shadow.size = fontSize;
