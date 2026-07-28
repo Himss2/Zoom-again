@@ -11,9 +11,13 @@
 namespace zoom_controller {
 namespace {
 
-constexpr float kInitialZoomFactor = 0.30f; 
-constexpr float kMinZoomLimit      = 0.03f; 
-constexpr float kMaxZoomLimit      = 0.85f; 
+// Skala Factor FOV:
+// 1.0f = FOV Normal Player (Maksimum Zoom Out)
+// > 1.0f = Zoom In (2.5f = 2.5x zoom, 6.0f = 6x zoom)
+constexpr float kNeutralFactor     = 1.0f;  
+constexpr float kInitialZoomFactor = 2.5f;  // Zoom awal saat ditekan
+constexpr float kMinZoomInFactor   = 1.0f;  // Batas Maksimum Zoom Out (Normal FOV)
+constexpr float kMaxZoomInFactor   = 6.0f;  // Batas Maksimum Zoom In (6x)
 
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_releasing{false};
@@ -24,10 +28,10 @@ float g_currentFactor = kNeutralFactor;
 using Clock = std::chrono::steady_clock;
 Clock::time_point g_releaseStartTime;
 float g_releaseStartFactor = kNeutralFactor;
-float g_releaseDurationMs = 150.0f;
+float g_releaseDurationMs = 180.0f;
 
 float Clamp(float value) {
-    return std::clamp(value, kMinZoomLimit, kMaxZoomLimit);
+    return std::clamp(value, kMinZoomInFactor, kMaxZoomInFactor);
 }
 
 float EaseOutCubic(float t) {
@@ -39,6 +43,7 @@ float EaseOutCubic(float t) {
 
 void BeginZoom() {
     g_targetFactor.store(kInitialZoomFactor, std::memory_order_relaxed);
+    g_currentFactor = kInitialZoomFactor; // Langsung set agar tidak ada lompatan awal
     g_releasing.store(false, std::memory_order_relaxed);
     g_active.store(true, std::memory_order_relaxed);
 }
@@ -60,7 +65,8 @@ void EndZoom() {
     g_releaseStartTime = Clock::now();
     
     float animSpeedSetting = static_cast<float>(config::g_settings.zoomAnimSpeed);
-    g_releaseDurationMs = std::clamp(300.0f - (animSpeedSetting * 20.0f), 80.0f, 280.0f);
+    // Durasi animasi rilis disesuaikan dengan setting kecepatan (ms)
+    g_releaseDurationMs = std::clamp(300.0f - (animSpeedSetting * 20.0f), 100.0f, 280.0f);
 
     g_releasing.store(true, std::memory_order_relaxed);
 }
@@ -91,11 +97,12 @@ void Tick() {
         float easedProgress = EaseOutCubic(progress);
         g_currentFactor = g_releaseStartFactor + (kNeutralFactor - g_releaseStartFactor) * easedProgress;
     } else {
+        // Transisi halus saat jari sedang mengusap (drag)
         float animSpeedSetting = static_cast<float>(config::g_settings.zoomAnimSpeed);
-        float speedMultiplier = std::clamp(animSpeedSetting * 0.04f, 0.05f, 0.4f);
+        float lerpSpeed = std::clamp(animSpeedSetting * 0.05f, 0.1f, 0.4f);
         float target = g_targetFactor.load(std::memory_order_relaxed);
         
-        g_currentFactor += (target - g_currentFactor) * speedMultiplier;
+        g_currentFactor += (target - g_currentFactor) * lerpSpeed;
     }
 
     camera_hook::SetOverride(g_currentFactor);
