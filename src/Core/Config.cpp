@@ -20,19 +20,11 @@ void Save() {
 }
 
 void RegisterModMenu() {
-    // Pass 2 argumen: ModId dan Display Name untuk UI
     pl::modmenu::ModuleBuilder builder(core::ModId(), "Zoom Settings");
 
-    // 1. Slider Kecepatan Animasi (Int Range 1 - 10)
-    builder.addInt("Kecepatan Animasi Zoom", 1, 10, &g_settings.zoomAnimSpeed);
+    // Preloader SDK merefleksikan struct Settings secara otomatis
+    builder.addConfig(g_configFile);
 
-    // 2. Toggle Suara Spyglass (Bool)
-    builder.addBool("Efek Suara Spyglass", &g_settings.enableSpyglassSound);
-
-    // 3. Toggle Hide Hand (Bool)
-    builder.addBool("Sembunyikan Tangan saat Zoom", &g_settings.hideHandOnZoom);
-
-    // Cast ke void untuk mengabaikan [[nodiscard]] warning
     (void)builder.registerModule();
 }
 
