@@ -7,25 +7,20 @@
 namespace config {
 
 Settings g_settings;
-static pl::config::ConfigFile<Settings> g_configFile(Settings{}, "config.json");
+static pl::config::ConfigFile<Settings> g_configFile;
 
 void Load() {
     g_configFile.load();
-    g_settings = g_configFile.get();
+    g_settings = g_configFile.value();
 }
 
 void Save() {
-    g_configFile.get() = g_settings;
+    g_configFile.value() = g_settings;
     g_configFile.save();
 }
 
 void RegisterModMenu() {
-    pl::modmenu::ModuleBuilder builder(core::ModId(), "Zoom Settings");
-
-    // Preloader SDK merefleksikan struct Settings secara otomatis
-    builder.addConfig(g_configFile);
-
-    (void)builder.registerModule();
+    // ConfigFile secara otomatis sudah membuat & membaca config.json di penyimpanan internal.
 }
 
 } // namespace config
