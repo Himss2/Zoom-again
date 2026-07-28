@@ -25,7 +25,7 @@ void UnregisterModMenu();
 // Schema metadata untuk Preloader Config Generator
 namespace pl::config {
 
-template <> struct Schema<config::Settings> {
+template <> struct Schema<::config::Settings> {
   static constexpr std::string_view title = "Zoom Settings";
   static constexpr std::string_view description = "Pengaturan untuk mod Smooth Zoom";
 
