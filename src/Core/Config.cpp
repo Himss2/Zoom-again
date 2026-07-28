@@ -1,7 +1,7 @@
 #include "Core/Config.hpp"
 #include "Core/ModContext.hpp"
 
-#include <pl/modmenu/ModMenu.hpp>
+#include <pl/runtime/ModMenuBridge.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
 
