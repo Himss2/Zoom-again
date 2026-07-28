@@ -15,11 +15,12 @@ namespace {
 constexpr const char* kTypeInfoCameraAPI      = "9CameraAPI";
 constexpr size_t      kTryGetFOVSlot          = 7;
 
-constexpr const char* kTypeInfoItemRenderer   = "16ItemInHandRenderer";
+// PERBAIKAN: "ItemInHandRenderer" terdiri dari 18 karakter (bukan 16)
+constexpr const char* kTypeInfoItemRenderer   = "18ItemInHandRenderer";
 constexpr const char* kMinecraftModule        = "libminecraftpe.so";
 
 using TryGetFOVFn  = uint64_t (*)(void*);
-using RenderHandFn = void (*)(void* thisPtr, void* arg1, void* arg2);
+using RenderHandFn = void (*)(void* thisPtr, void* arg1, void* arg2, void* arg3);
 
 TryGetFOVFn    g_origTryGetFOV   = nullptr;
 RenderHandFn   g_origRenderHand  = nullptr;
@@ -51,14 +52,14 @@ uint64_t DetourFOV(void* thisPtr) {
     return PackFov(true, g_overrideValue.load(std::memory_order_relaxed));
 }
 
-void DetourRenderHand(void* thisPtr, void* arg1, void* arg2) {
-    // Jika Zoom aktif dan toggle Hide Hand dinyalakan, jangan render tangan!
+void DetourRenderHand(void* thisPtr, void* arg1, void* arg2, void* arg3) {
+    // Jika Zoom aktif dan toggle Hide Hand di Mod Menu dinyalakan, batalkan render tangan
     if (zoom_controller::IsActive() && config::g_settings.hideHandOnZoom) {
         return; 
     }
     
     if (g_origRenderHand) {
-        g_origRenderHand(thisPtr, arg1, arg2);
+        g_origRenderHand(thisPtr, arg1, arg2, arg3);
     }
 }
 
@@ -90,8 +91,8 @@ bool Install() {
     }
     g_origTryGetFOV = reinterpret_cast<TryGetFOVFn>(origCamOut);
 
-    // 2. Hook ItemInHandRenderer untuk menyembunyikan tangan (Mencoba slot VTable 1, 2, atau 3)
-    constexpr size_t kRenderCandidateSlots[] = {1, 2, 3};
+    // 2. Hook ItemInHandRenderer dengan pemindaian slot (1, 2, 3, 0, 4)
+    constexpr size_t kRenderCandidateSlots[] = {1, 2, 3, 0, 4};
     for (size_t slot : kRenderCandidateSlots) {
         g_targetRenderHand = reinterpret_cast<void*>(
             pl::memory::resolveVtableFunction(kTypeInfoItemRenderer, slot, kMinecraftModule));
@@ -106,7 +107,7 @@ bool Install() {
 
             if (resRender == 0) {
                 g_origRenderHand = reinterpret_cast<RenderHandFn>(origRenderOut);
-                log.info("CameraHook: successfully installed ItemInHandRenderer hook at vtable slot {}", slot);
+                log.info("CameraHook: successfully hooked ItemInHandRenderer at vtable slot {}", slot);
                 break;
             }
         }
