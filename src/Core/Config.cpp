@@ -12,8 +12,6 @@ namespace config {
 
 Settings g_settings;
 
-// Menggunakan pointer agar ConfigFile baru dibuat SETELAH core::Init() berjalan
-// (saat NativeMod::current() sudah valid & lokasi folder mod terdeteksi)
 static std::unique_ptr<pl::config::ConfigFile<Settings>> g_configFile;
 
 constexpr const char *kModuleId = "zoom_rewrite";
@@ -41,6 +39,7 @@ static void onConfigChanged(std::string_view moduleId, std::string_view key, std
     if (key == "zoomAnimSpeed") {
         g_settings.zoomAnimSpeed = std::atoi(safeValue.c_str());
     } else if (key == "hideHandOnZoom") {
+        // Toggle biasanya mengirimkan "true"/"false" atau "1"/"0"
         g_settings.hideHandOnZoom = (safeValue == "1" || safeValue == "true");
     } else if (key == "pos_x") {
         g_settings.posX = std::strtof(safeValue.c_str(), nullptr);
@@ -54,12 +53,10 @@ static void onConfigChanged(std::string_view moduleId, std::string_view key, std
 }
 
 void RegisterModMenu() {
-    // Muat konfigurasi tersimpan dari disk terlebih dahulu
     Load();
 
-    // Konversi nilai tersimpan ke string untuk ditampilkan secara dinamis di Mod Menu UI
     std::string strSpeed    = std::to_string(g_settings.zoomAnimSpeed);
-    std::string strHideHand = g_settings.hideHandOnZoom ? "1" : "0";
+    std::string strHideHand = g_settings.hideHandOnZoom ? "true" : "false";
     std::string strX        = std::to_string(g_settings.posX);
     std::string strY        = std::to_string(g_settings.posY);
     std::string strScale    = std::to_string(g_settings.scale);
@@ -70,7 +67,7 @@ void RegisterModMenu() {
         .config("zoomAnimSpeed", "Kecepatan Zoom",
                 pl::modmenu::ConfigType::SliderInt, strSpeed, "1", "10")
         .config("hideHandOnZoom", "Sembunyikan Tangan",
-                pl::modmenu::ConfigType::Radio, strHideHand, "Matikan,Aktif")
+                pl::modmenu::ConfigType::Toggle, strHideHand)
         .config("pos_x", "Posisi X Tombol", 
                 pl::modmenu::ConfigType::SliderFloat, strX, "0.0", "2500.0")
         .config("pos_y", "Posisi Y Tombol", 
