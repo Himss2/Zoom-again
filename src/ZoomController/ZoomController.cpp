@@ -11,7 +11,6 @@ namespace {
 constexpr float kInitialZoomFactor = 0.30f; // Zoom awal saat tombol ditekan
 constexpr float kMinZoomLimit      = 0.03f; // Zoom maksimal (terdekat)
 constexpr float kMaxZoomLimit      = 0.85f; // Zoom minimal
-constexpr float kNeutralFactor     = 1.0f;  // FOV Normal bawaan game
 
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_releasing{false};
@@ -78,9 +77,6 @@ void Tick() {
 
     // =========================================================================
     // HITUNG KECEPATAN ANIMASI BERDASARKAN SLIDER MOD MENU (Rentang 1 - 10)
-    // 1  -> 0.05f (Sangat Mulus & Halus)
-    // 5  -> 0.20f (Ideal)
-    // 10 -> 0.45f (Responsif & Cepat)
     // =========================================================================
     float speedMultiplier = static_cast<float>(config::g_settings.zoomAnimSpeed) * 0.045f;
 
@@ -91,7 +87,7 @@ void Tick() {
         // Smooth Lerp kembali ke 1.0f
         g_currentFactor += (target - g_currentFactor) * speedMultiplier;
 
-        // DIUBAH: Menggunakan toleransi 0.995f agar transisi zoom-out tuntas 100% mulus tanpa kaget/patah
+        // Toleransi 0.995f agar transisi zoom-out tuntas 100% mulus tanpa kaget
         if (g_currentFactor >= 0.995f) {
             g_currentFactor = kNeutralFactor;
             g_active.store(false, std::memory_order_relaxed);
