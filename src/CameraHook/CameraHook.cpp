@@ -12,20 +12,20 @@
 namespace camera_hook {
 namespace {
 
-constexpr const char* kTypeInfoCameraAPI = "9CameraAPI";
-constexpr size_t      kTryGetFOVSlot     = 7;
+constexpr const char* kTypeInfoCameraAPI      = "9CameraAPI";
+constexpr size_t      kTryGetFOVSlot          = 7;
 
-constexpr const char* kTypeInfoOptions   = "7Options";
-constexpr const char* kMinecraftModule   = "libminecraftpe.so";
+constexpr const char* kTypeInfoItemRenderer   = "16ItemInHandRenderer";
+constexpr const char* kMinecraftModule        = "libminecraftpe.so";
 
-using TryGetFOVFn   = uint64_t (*)(void*);
-using GetHideHandFn = bool (*)(void*);
+using TryGetFOVFn  = uint64_t (*)(void*);
+using RenderHandFn = void (*)(void* thisPtr, void* arg1, void* arg2);
 
-TryGetFOVFn   g_origTryGetFOV   = nullptr;
-GetHideHandFn g_origGetHideHand = nullptr;
+TryGetFOVFn    g_origTryGetFOV   = nullptr;
+RenderHandFn   g_origRenderHand  = nullptr;
 
-void* g_targetCamera   = nullptr;
-void* g_targetHideHand = nullptr;
+void* g_targetCamera     = nullptr;
+void* g_targetRenderHand = nullptr;
 
 std::atomic<bool>  g_hasOverride{false};
 std::atomic<float> g_overrideValue{1.0f};
@@ -51,16 +51,15 @@ uint64_t DetourFOV(void* thisPtr) {
     return PackFov(true, g_overrideValue.load(std::memory_order_relaxed));
 }
 
-bool DetourHideHand(void* thisPtr) {
-    // Sembunyikan tangan secara paksa jika Zoom sedang aktif dan setting Hide Hand dinyalakan
+void DetourRenderHand(void* thisPtr, void* arg1, void* arg2) {
+    // Jika Zoom aktif dan toggle Hide Hand dinyalakan, jangan render tangan!
     if (zoom_controller::IsActive() && config::g_settings.hideHandOnZoom) {
-        return true; 
+        return; 
     }
     
-    if (g_origGetHideHand) {
-        return g_origGetHideHand(thisPtr);
+    if (g_origRenderHand) {
+        g_origRenderHand(thisPtr, arg1, arg2);
     }
-    return false;
 }
 
 } // namespace
@@ -91,30 +90,30 @@ bool Install() {
     }
     g_origTryGetFOV = reinterpret_cast<TryGetFOVFn>(origCamOut);
 
-    // 2. Hook Options::getHideHand dengan pencarian slot VTable otomatis (23 -> 22 -> 24)
-    constexpr size_t kHideHandCandidateSlots[] = {23, 22, 24};
-    for (size_t slot : kHideHandCandidateSlots) {
-        g_targetHideHand = reinterpret_cast<void*>(
-            pl::memory::resolveVtableFunction(kTypeInfoOptions, slot, kMinecraftModule));
+    // 2. Hook ItemInHandRenderer untuk menyembunyikan tangan (Mencoba slot VTable 1, 2, atau 3)
+    constexpr size_t kRenderCandidateSlots[] = {1, 2, 3};
+    for (size_t slot : kRenderCandidateSlots) {
+        g_targetRenderHand = reinterpret_cast<void*>(
+            pl::memory::resolveVtableFunction(kTypeInfoItemRenderer, slot, kMinecraftModule));
 
-        if (g_targetHideHand) {
-            void* origHideOut = nullptr;
-            int resHide = pl::memory::hook(
-                g_targetHideHand,
-                reinterpret_cast<void*>(DetourHideHand),
-                &origHideOut,
+        if (g_targetRenderHand) {
+            void* origRenderOut = nullptr;
+            int resRender = pl::memory::hook(
+                g_targetRenderHand,
+                reinterpret_cast<void*>(DetourRenderHand),
+                &origRenderOut,
                 pl::memory::HookPriority::Normal);
 
-            if (resHide == 0) {
-                g_origGetHideHand = reinterpret_cast<GetHideHandFn>(origHideOut);
-                log.info("CameraHook: successfully installed Options::getHideHand hook at vtable slot {}", slot);
+            if (resRender == 0) {
+                g_origRenderHand = reinterpret_cast<RenderHandFn>(origRenderOut);
+                log.info("CameraHook: successfully installed ItemInHandRenderer hook at vtable slot {}", slot);
                 break;
             }
         }
     }
 
-    if (!g_origGetHideHand) {
-        log.warn("CameraHook: could not resolve or hook Options::getHideHand on candidate slots");
+    if (!g_origRenderHand) {
+        log.warn("CameraHook: could not resolve or hook ItemInHandRenderer");
     }
 
     return true;
@@ -125,9 +124,9 @@ void Uninstall() {
         pl::memory::unhook(g_targetCamera, reinterpret_cast<void*>(DetourFOV));
         g_targetCamera = nullptr;
     }
-    if (g_targetHideHand) {
-        pl::memory::unhook(g_targetHideHand, reinterpret_cast<void*>(DetourHideHand));
-        g_targetHideHand = nullptr;
+    if (g_targetRenderHand) {
+        pl::memory::unhook(g_targetRenderHand, reinterpret_cast<void*>(DetourRenderHand));
+        g_targetRenderHand = nullptr;
     }
 }
 
