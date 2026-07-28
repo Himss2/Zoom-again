@@ -7,45 +7,33 @@
 namespace config {
 
 Settings g_settings;
-static pl::config::ConfigFile g_configFile("config.json");
+static pl::config::ConfigFile<Settings> g_configFile(Settings{}, "config.json");
 
 void Load() {
     g_configFile.load();
-    g_settings.zoomAnimSpeed = g_configFile.get<int>("zoomAnimSpeed", 5);
-    g_settings.enableSpyglassSound = g_configFile.get<bool>("enableSpyglassSound", true);
-    g_settings.hideHandOnZoom = g_configFile.get<bool>("hideHandOnZoom", true);
+    g_settings = g_configFile.get();
 }
 
 void Save() {
-    g_configFile.set("zoomAnimSpeed", g_settings.zoomAnimSpeed);
-    g_configFile.set("enableSpyglassSound", g_settings.enableSpyglassSound);
-    g_configFile.set("hideHandOnZoom", g_settings.hideHandOnZoom);
+    g_configFile.get() = g_settings;
     g_configFile.save();
 }
 
 void RegisterModMenu() {
-    // Daftarkan Pengaturan ke UI Mod Menu Preloader
-    pl::modmenu::ModuleBuilder builder(core::ModId());
-    
-    // 1. Slider Kecepatan Animasi (1 - 10)
-    builder.addSlider("Kecepatan Animasi Zoom", 1, 10, &g_settings.zoomAnimSpeed, [](int val) {
-        g_settings.zoomAnimSpeed = val;
-        Save();
-    });
+    // Pass 2 argumen: ModId dan Display Name untuk UI
+    pl::modmenu::ModuleBuilder builder(core::ModId(), "Zoom Settings");
 
-    // 2. Toggle Suara Spyglass
-    builder.addToggle("Efek Suara Spyglass", &g_settings.enableSpyglassSound, [](bool val) {
-        g_settings.enableSpyglassSound = val;
-        Save();
-    });
+    // 1. Slider Kecepatan Animasi (Int Range 1 - 10)
+    builder.addInt("Kecepatan Animasi Zoom", 1, 10, &g_settings.zoomAnimSpeed);
 
-    // 3. Toggle Hide Hand
-    builder.addToggle("Sembunyikan Tangan saat Zoom", &g_settings.hideHandOnZoom, [](bool val) {
-        g_settings.hideHandOnZoom = val;
-        Save();
-    });
+    // 2. Toggle Suara Spyglass (Bool)
+    builder.addBool("Efek Suara Spyglass", &g_settings.enableSpyglassSound);
 
-    builder.registerModule();
+    // 3. Toggle Hide Hand (Bool)
+    builder.addBool("Sembunyikan Tangan saat Zoom", &g_settings.hideHandOnZoom);
+
+    // Cast ke void untuk mengabaikan [[nodiscard]] warning
+    (void)builder.registerModule();
 }
 
 } // namespace config
