@@ -8,10 +8,9 @@
 namespace zoom_controller {
 namespace {
 
-constexpr float kNeutralFactor     = 1.0f;  
-constexpr float kInitialZoomFactor = 0.30f; 
-constexpr float kMinZoomLimit      = 0.03f; 
-constexpr float kMaxZoomLimit      = 0.85f; 
+constexpr float kInitialZoomFactor = 0.30f; // Zoom awal saat tombol ditekan
+constexpr float kMinZoomLimit      = 0.03f; // Zoom maksimal (teleskopik dekat)
+constexpr float kMaxZoomLimit      = 0.85f; // Zoom minimal
 
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_releasing{false};
@@ -58,21 +57,16 @@ void Tick() {
 
     if (isReleasing) {
         // =====================================================================
-        // FIX: TRANSISI KEMBALI KE FOV PLAYER TANPA PATAH
+        // TRANSISI KEMBALI KE FOV PLAYER TANPA PATAH
         // =====================================================================
-        // Kecepatan kembalinya camera FOV
         g_currentFactor += (target - g_currentFactor) * 0.40f;
 
-        // Ambang batas (threshold) pelepasan hook diperbesar (0.92f)
-        // Agar hook dilepas SAAT kamera sedang bergerak cepat menuju normal,
-        // sehingga game engine Minecraft melanjutkan sisa pergerakan FOV-nya
-        // sendiri tanpa ada jeda/tahanan kaku di 1.0f!
+        // Ambang batas 0.92f agar hook dilepas saat kamera masih punya momentum
         if (g_currentFactor >= 0.92f) {
             g_currentFactor = kNeutralFactor;
             g_active.store(false, std::memory_order_relaxed);
             g_releasing.store(false, std::memory_order_relaxed);
             
-            // Lepas override hook kamera secara mulus
             camera_hook::ClearOverride();
             return;
         }
