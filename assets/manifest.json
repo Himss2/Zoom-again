@@ -5,7 +5,7 @@
   "author": "Himss",
   "version": "0.1.0",
   "entry": "libZoomRewrite.so",
-  "minecraft_versions": ["1.26.3*"],
+  "minecraft_versions": ["1.26.4*"],
   "overwrite_files": [],
   "overwrite_folders": []
 }
