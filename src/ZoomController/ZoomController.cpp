@@ -14,6 +14,15 @@ constexpr float kInitialZoomFactor = 0.30f; // Zoom awal saat tombol ditekan
 constexpr float kMinZoomLimit      = 0.03f; // Zoom maksimal (teleskopik dekat)
 constexpr float kMaxZoomLimit      = 0.85f; // Zoom minimal
 
+// How close currentFactor must get to the target before we snap and
+// clear the override. This used to be an absolute threshold (0.92f)
+// which left an 8% gap to jump instantly - very noticeable at low
+// release speeds since the decay curve is imperceptibly slow right
+// before the snap. Using a small epsilon on the remaining distance
+// instead means the final "jump" is always tiny (0.5% of the full
+// range), regardless of releaseSpeed.
+constexpr float kReleaseEpsilon = 0.005f;
+
 std::atomic<bool> g_active{false};
 std::atomic<bool> g_releasing{false};
 
@@ -72,12 +81,15 @@ void Tick() {
         // =====================================================================
         g_currentFactor += (target - g_currentFactor) * releaseSpeed;
 
-        // Ambang batas 0.92f agar hook dilepas saat kamera masih punya momentum
-        if (g_currentFactor >= 0.92f) {
+        // Berhenti kalau jarak sisa ke target sudah sangat kecil - bukan
+        // nilai absolut tetap (0.92f lama), supaya "lompatan" terakhir
+        // selalu tipis (0.5% dari rentang) berapa pun releaseSpeed-nya,
+        // alih-alih selalu 8% seperti sebelumnya.
+        if (std::abs(target - g_currentFactor) <= kReleaseEpsilon) {
             g_currentFactor = kNeutralFactor;
             g_active.store(false, std::memory_order_relaxed);
             g_releasing.store(false, std::memory_order_relaxed);
-            
+
             camera_hook::ClearOverride();
             return;
         }
