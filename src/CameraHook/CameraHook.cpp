@@ -7,7 +7,8 @@
 #include <pl/memory/Hook.hpp>
 #include <pl/memory/Vtable.hpp>
 #include <atomic>
-#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 
 namespace camera_hook {
@@ -17,21 +18,17 @@ constexpr const char* kTypeInfoCameraAPI  = "9CameraAPI";
 constexpr size_t      kTryGetFOVSlot      = 7;
 
 constexpr const char* kTypeInfoOptions    = "7Options";
-constexpr const char* kMinecraftModule   = "libminecraftpe.so";
+constexpr const char* kMinecraftModule    = "libminecraftpe.so";
 
 using TryGetFOVFn   = uint64_t (*)(void*);
 using GetHideHandFn = bool (*)(void*);
 
 TryGetFOVFn   g_origTryGetFOV   = nullptr;
-GetHideHandFn g_origGetHideHand = nullptr;
 
 void* g_targetCamera   = nullptr;
-void* g_targetHideHand = nullptr;
 
 std::atomic<bool>  g_hasOverride{false};
 std::atomic<float> g_overrideValue{1.0f};
-
-std::function<void()> g_tickCallback;
 
 uint64_t PackFov(bool hasValue, float value) {
     uint32_t bits;
@@ -41,21 +38,6 @@ uint64_t PackFov(bool hasValue, float value) {
 }
 
 uint64_t DetourFOV(void* thisPtr) {
-    // =========================================================================
-    // OPTIMASI: FRAME GUARD (Mencegah eksekusi g_tickCallback berulang per frame)
-    // =========================================================================
-    static auto lastTickTime = std::chrono::steady_clock::now();
-    auto now = std::chrono::steady_clock::now();
-    
-    // Batasi tick callback maksimal 1x setiap 8.000 mikrodetik (~125 FPS max rate)
-    auto elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(now - lastTickTime).count();
-    if (elapsedUs >= 8000) {
-        lastTickTime = now;
-        if (g_tickCallback) {
-            g_tickCallback();
-        }
-    }
-
     if (!g_hasOverride.load(std::memory_order_relaxed)) {
         return g_origTryGetFOV(thisPtr);
     }
@@ -63,15 +45,57 @@ uint64_t DetourFOV(void* thisPtr) {
     return PackFov(true, g_overrideValue.load(std::memory_order_relaxed));
 }
 
-bool DetourHideHand(void* thisPtr) {
-    if (zoom_controller::IsActive() && config::g_settings.hideHandOnZoom) {
-        return true; 
+// =============================================================================
+// getHideHand DIAGNOSTIC BLOCK - TEMPORARY
+//
+// Options::getHideHand's real vtable slot is not confirmed (unlike
+// tryGetFOV, which was verified via DWARF). Instead of guessing and
+// hooking a single candidate slot, this installs a passthrough
+// diagnostic on every candidate slot at once - each one just logs how
+// many times it's been called and forwards to the original
+// implementation unchanged, so behavior is never altered by this block.
+//
+// HOW TO USE: build with this in place, play normally, and specifically
+// draw a bow and block with a shield a few times. Then check logcat for
+// lines like "HideHandDiag: slot N called (count=...)". Whichever
+// slot's count visibly jumps in sync with those actions is the real
+// getHideHand.
+//
+// Once you have that slot number, tell me and I'll give you the final
+// version: delete this whole diagnostic block and replace it with a
+// single hardcoded hook on the confirmed slot, exactly like tryGetFOV
+// above.
+// =============================================================================
+
+template <size_t Slot>
+struct HideHandDiagnostic {
+    static inline GetHideHandFn original = nullptr;
+    static inline std::atomic<uint64_t> callCount{0};
+
+    static bool Detour(void* thisPtr) {
+        auto count = callCount.fetch_add(1, std::memory_order_relaxed) + 1;
+        core::Log().info("HideHandDiag: slot {} called (count={})", Slot, count);
+        return original ? original(thisPtr) : false;
     }
-    
-    if (g_origGetHideHand) {
-        return g_origGetHideHand(thisPtr);
-    }
-    return false;
+};
+
+template <size_t Slot>
+bool InstallHideHandDiagnostic() {
+    void* target = reinterpret_cast<void*>(
+        pl::memory::resolveVtableFunction(kTypeInfoOptions, Slot, kMinecraftModule));
+    if (!target) return false;
+
+    void* origOut = nullptr;
+    int res = pl::memory::hook(
+        target,
+        reinterpret_cast<void*>(&HideHandDiagnostic<Slot>::Detour),
+        &origOut,
+        pl::memory::HookPriority::Normal);
+    if (res != 0) return false;
+
+    HideHandDiagnostic<Slot>::original = reinterpret_cast<GetHideHandFn>(origOut);
+    core::Log().info("HideHandDiag: hooked slot {}", Slot);
+    return true;
 }
 
 } // namespace
@@ -79,7 +103,7 @@ bool DetourHideHand(void* thisPtr) {
 bool Install() {
     auto& log = core::Log();
 
-    // 1. Hook CameraAPI::tryGetFOV
+    // 1. Hook CameraAPI::tryGetFOV (confirmed slot - real feature, must succeed)
     g_targetCamera = reinterpret_cast<void*>(
         pl::memory::resolveVtableFunction(kTypeInfoCameraAPI, kTryGetFOVSlot, kMinecraftModule));
 
@@ -102,32 +126,20 @@ bool Install() {
     }
     g_origTryGetFOV = reinterpret_cast<TryGetFOVFn>(origCamOut);
 
-    // 2. Hook Options::getHideHand
-    constexpr size_t kHideHandSlots[] = {27, 28, 29, 26, 25, 30, 31, 32, 23, 22, 24};
-    
-    for (size_t slot : kHideHandSlots) {
-        g_targetHideHand = reinterpret_cast<void*>(
-            pl::memory::resolveVtableFunction(kTypeInfoOptions, slot, kMinecraftModule));
-
-        if (g_targetHideHand) {
-            void* origHideOut = nullptr;
-            int resHide = pl::memory::hook(
-                g_targetHideHand,
-                reinterpret_cast<void*>(DetourHideHand),
-                &origHideOut,
-                pl::memory::HookPriority::Normal);
-
-            if (resHide == 0) {
-                g_origGetHideHand = reinterpret_cast<GetHideHandFn>(origHideOut);
-                log.info("CameraHook: successfully installed Options::getHideHand hook at vtable slot {}", slot);
-                break;
-            }
-        }
-    }
-
-    if (!g_origGetHideHand) {
-        log.warn("CameraHook: could not resolve or hook Options::getHideHand on candidate slots");
-    }
+    // 2. getHideHand - diagnostic only for now, see block comment above.
+    // Best-effort: failures here don't fail Install() as a whole, since
+    // the core zoom feature (FOV) already succeeded above.
+    InstallHideHandDiagnostic<22>();
+    InstallHideHandDiagnostic<23>();
+    InstallHideHandDiagnostic<24>();
+    InstallHideHandDiagnostic<25>();
+    InstallHideHandDiagnostic<26>();
+    InstallHideHandDiagnostic<27>();
+    InstallHideHandDiagnostic<28>();
+    InstallHideHandDiagnostic<29>();
+    InstallHideHandDiagnostic<30>();
+    InstallHideHandDiagnostic<31>();
+    InstallHideHandDiagnostic<32>();
 
     return true;
 }
@@ -137,10 +149,11 @@ void Uninstall() {
         pl::memory::unhook(g_targetCamera, reinterpret_cast<void*>(DetourFOV));
         g_targetCamera = nullptr;
     }
-    if (g_targetHideHand) {
-        pl::memory::unhook(g_targetHideHand, reinterpret_cast<void*>(DetourHideHand));
-        g_targetHideHand = nullptr;
-    }
+    g_origTryGetFOV = nullptr;
+
+    // Diagnostic hideHand hooks are intentionally left installed/leaked
+    // for now since this whole block is temporary and gets deleted once
+    // the real slot is confirmed - not meant to survive to a release build.
 }
 
 void SetOverride(float factor) {
@@ -150,10 +163,6 @@ void SetOverride(float factor) {
 
 void ClearOverride() {
     g_hasOverride.store(false, std::memory_order_relaxed);
-}
-
-void SetFrameTickCallback(std::function<void()> callback) {
-    g_tickCallback = std::move(callback);
 }
 
 } // namespace camera_hook
