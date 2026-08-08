@@ -51,6 +51,7 @@ add_library(ZoomRewrite SHARED
     src/Core/ModEntry.cpp
     src/Core/Config.cpp
     src/CameraHook/CameraHook.cpp
+    src/CameraHook/FrameHook.cpp
     src/ZoomController/ZoomController.cpp
     src/TouchController/TouchController.cpp
     src/ZoomButton/ZoomButton.cpp
