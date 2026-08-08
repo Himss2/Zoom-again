@@ -1,109 +1,72 @@
+#include "TouchController/TouchController.hpp"
+
+#include "Core/ModContext.hpp"
 #include "ZoomController/ZoomController.hpp"
+#include "ZoomButton/ZoomButton.hpp"
 
-#include "CameraHook/CameraHook.hpp"
-#include "Core/Config.hpp"
+#include <pl/Input.hpp>
 
-#include <atomic>
-#include <cmath>
-#include <algorithm>
-
-namespace zoom_controller {
+namespace touch_controller {
 namespace {
 
-constexpr float kInitialZoomFactor = 0.30f; // Zoom awal saat tombol ditekan
-constexpr float kMinZoomLimit      = 0.03f; // Zoom maksimal (teleskopik dekat)
-constexpr float kMaxZoomLimit      = 0.85f; // Zoom minimal
+constexpr int kActionMask        = 0xFF;
+constexpr int kActionDown        = 0;
+constexpr int kActionUp          = 1;
+constexpr int kActionMove        = 2;
+constexpr int kActionCancel      = 3;
+constexpr int kActionPointerDown = 5;
+constexpr int kActionPointerUp   = 6;
 
-// How close currentFactor must get to the target before we snap and
-// clear the override. This used to be an absolute threshold (0.92f)
-// which left an 8% gap to jump instantly - very noticeable at low
-// release speeds since the decay curve is imperceptibly slow right
-// before the snap. Using a small epsilon on the remaining distance
-// instead means the final "jump" is always tiny (0.5% of the full
-// range), regardless of releaseSpeed.
-constexpr float kReleaseEpsilon = 0.005f;
+int g_trackedPointerId = -1;
+float g_lastY = 0.0f;
 
-std::atomic<bool> g_active{false};
-std::atomic<bool> g_releasing{false};
+bool OnTouch(const pl::input::TouchEvent& ev) {
+    int action = ev.action & kActionMask;
 
-std::atomic<float> g_targetFactor{kNeutralFactor};
-float g_currentFactor = kNeutralFactor;
+    switch (action) {
+        case kActionDown:
+        case kActionPointerDown:
+            // Tangkap hanya jika tombol "ZM" ditekan
+            if (g_trackedPointerId == -1 && zoom_button::Contains(ev.x, ev.y)) {
+                g_trackedPointerId = ev.pointerId;
+                g_lastY = ev.y;
+                zoom_controller::BeginZoom();
+                return true; // Konsumsi DOWN agar MC tidak memukul/menghancurkan blok
+            }
+            return false; // Jari lain (kamera) diteruskan ke Minecraft
 
-float Clamp(float value) {
-    if (value < kMinZoomLimit) return kMinZoomLimit;
-    if (value > kMaxZoomLimit) return kMaxZoomLimit;
-    return value;
+        case kActionMove:
+            if (g_trackedPointerId != -1 && ev.pointerId == g_trackedPointerId) {
+                float deltaY = ev.y - g_lastY; // Geser ke atas = deltaY minus (zoom in)
+                g_lastY = ev.y;
+                
+                // Sensitivitas drag disesuaikan agar transisi zoom halus
+                zoom_controller::UpdateDrag(deltaY * 0.0015f);
+            }
+            // CRITICAL FIX: Selalu return false pada MOVE agar Minecraft 
+            // tetap menerima input rotasi kamera dari jari kedua!
+            return false;
+
+        case kActionUp:
+        case kActionPointerUp:
+        case kActionCancel:
+            if (ev.pointerId == g_trackedPointerId) {
+                g_trackedPointerId = -1;
+                zoom_controller::EndZoom();
+                return true; // Konsumsi UP tombol zoom
+            }
+            return false;
+
+        default:
+            return false;
+    }
 }
 
 } // namespace
 
-void BeginZoom() {
-    g_targetFactor.store(kInitialZoomFactor, std::memory_order_relaxed);
-    g_releasing.store(false, std::memory_order_relaxed);
-    g_active.store(true, std::memory_order_relaxed);
+void Install() {
+    pl::input::registerTouchCallback(OnTouch);
+    core::Log().info("TouchController: Multi-touch passthrough & smooth drag ready");
 }
 
-void UpdateDrag(float delta) {
-    if (!g_active.load(std::memory_order_relaxed) || g_releasing.load(std::memory_order_relaxed)) {
-        return;
-    }
-
-    float currentTarget = g_targetFactor.load(std::memory_order_relaxed);
-    float newTarget = Clamp(currentTarget + delta);
-    g_targetFactor.store(newTarget, std::memory_order_relaxed);
-}
-
-void EndZoom() {
-    g_targetFactor.store(kNeutralFactor, std::memory_order_relaxed);
-    g_releasing.store(true, std::memory_order_relaxed);
-}
-
-void Tick() {
-    if (!g_active.load(std::memory_order_relaxed)) {
-        return;
-    }
-
-    float target = g_targetFactor.load(std::memory_order_relaxed);
-    bool isReleasing = g_releasing.load(std::memory_order_relaxed);
-
-    // Ambil setting kecepatan animasi dari Mod Menu (1 - 10, default = 5)
-    float speedSetting = static_cast<float>(config::g_settings.zoomAnimSpeed);
-
-    // Pada setting default (5):
-    // - releaseSpeed = 5 * 0.08f = 0.40f
-    // - zoomInSpeed  = 5 * 0.05f = 0.25f
-    float releaseSpeed = std::clamp(speedSetting * 0.08f, 0.08f, 0.80f);
-    float zoomInSpeed  = std::clamp(speedSetting * 0.05f, 0.05f, 0.50f);
-
-    if (isReleasing) {
-        // =====================================================================
-        // TRANSISI KEMBALI KE FOV PLAYER TANPA PATAH
-        // =====================================================================
-        g_currentFactor += (target - g_currentFactor) * releaseSpeed;
-
-        // Berhenti kalau jarak sisa ke target sudah sangat kecil - bukan
-        // nilai absolut tetap (0.92f lama), supaya "lompatan" terakhir
-        // selalu tipis (0.5% dari rentang) berapa pun releaseSpeed-nya,
-        // alih-alih selalu 8% seperti sebelumnya.
-        if (std::abs(target - g_currentFactor) <= kReleaseEpsilon) {
-            g_currentFactor = kNeutralFactor;
-            g_active.store(false, std::memory_order_relaxed);
-            g_releasing.store(false, std::memory_order_relaxed);
-
-            camera_hook::ClearOverride();
-            return;
-        }
-    } else {
-        // Logika saat Zoom In (ditekan / di-drag)
-        float diff = target - g_currentFactor;
-        g_currentFactor += diff * zoomInSpeed;
-    }
-
-    camera_hook::SetOverride(g_currentFactor);
-}
-
-bool IsActive() {
-    return g_active.load(std::memory_order_relaxed);
-}
-
-} // namespace zoom_controller
+} // namespace touch_controller
