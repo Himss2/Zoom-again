@@ -62,7 +62,7 @@ target_include_directories(ZoomRewrite PRIVATE
     ${boost_pfr_SOURCE_DIR}/include
     ${magic_enum_SOURCE_DIR}/include
 )
-target_link_libraries(ZoomRewrite PRIVATE preloader nlohmann_json::nlohmann_json fmt::fmt log)
+target_link_libraries(ZoomRewrite PRIVATE preloader nlohmann_json::nlohmann_json fmt::fmt log EGL)
 
 set_target_properties(ZoomRewrite PROPERTIES
     OUTPUT_NAME "ZoomRewrite"
